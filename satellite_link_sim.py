@@ -20,9 +20,11 @@ Physics models:
 import math
 import random
 import statistics
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 from ground_stations import GROUND_STATIONS
+from propogate import Propagator
 
 # ── Physical constants ────────────────────────────────────────────────────────
 C     = 2.998e8
@@ -245,7 +247,7 @@ def packet_loss_from_snr(snr_db, threshold_db=SNR_THRESHOLD_DB):
 class StationResult:
     # identity
     name:          str
-    # geometry
+    # geometry (initial or mean values)
     elevation:     float
     slant_km:      float
     doppler_hz:    float
@@ -259,11 +261,14 @@ class StationResult:
     scint_sig:     float
     noise_floor:   float   # dBW — so UI can show noise budget
     # time series
-    snr_series:      list
-    rain_series:     list
-    rain_db_series:  list
-    scint_series:    list
-    pkt_loss_series: list
+    snr_series:        list
+    rain_series:       list
+    rain_db_series:    list
+    scint_series:      list
+    pkt_loss_series:   list
+    elevation_series:  list   # New
+    slant_range_series: list  # New
+    doppler_series:    list   # New
     # summary statistics
     snr_mean:        float
     snr_min:         float
@@ -282,6 +287,7 @@ class StationResult:
 def simulate_station(gs: dict, *,
                      n_steps:         int   = DEFAULT_N_STEPS,
                      dt_s:            float = DEFAULT_DT_S,
+                     start_time:      datetime | None = None,
                      force_rain:      bool  = False,
                      seed:            int | None = None,
                      # ── overrideable physical knobs ──────────────────────
@@ -293,34 +299,41 @@ def simulate_station(gs: dict, *,
                      ) -> StationResult:
     """
     Run the full ITU-R physics simulation for one ground station.
-
-    Physical overrides (from UI sliders) affect the sim directly:
-      freq_hz         — carrier frequency changes FSPL, P.838 k/alpha, P.676
-      eirp_offset_db  — power amplifier headroom or deliberate power reduction
-      bandwidth_hz    — wider BW raises noise floor, lowering SNR
-      polarization    — switches P.838 k/alpha coefficients
-      rain_rate_scale — scales ITU rain rates (1.0=climatological, 2.0=severe)
+    Now supports dynamic SGP4 propagation if 'norad_id' or 'sat_name' in gs.
     """
     if seed is not None:
         random.seed(seed)
 
     freq_ghz = freq_hz / 1e9
     lat, lon = gs["latitude"], gs["longitude"]
+    alt_km = gs["altitude_km"]
+    
+    # ── Initialization ────────────────────────────────────────────────────────
+    propagator = Propagator()
+    curr_time = start_time or datetime.now(timezone.utc)
+    
+    # Initial geometry (or static if no SGP4)
+    sat_id = gs.get("norad_id") or gs.get("sat_name")
+    if sat_id:
+        geo = propagator.get_geometry(sat_id, curr_time, lat, lon, alt_km)
+        if geo:
+            elevation = geo.elevation_deg
+            slant_km  = geo.slant_range_km
+            dop_hz    = doppler_shift_hz(geo.radial_velocity_ms, freq_hz)
+        else:
+            # Fallback to static if propagation fails
+            elevation = geo_elevation_deg(lat, lon, gs["sat_lon_deg"])
+            slant_km  = geo_slant_range_km(lat, lon, gs["sat_lon_deg"])
+            dop_hz    = doppler_shift_hz(gs["v_radial_ms"], freq_hz)
+    else:
+        elevation = geo_elevation_deg(lat, lon, gs["sat_lon_deg"])
+        slant_km  = geo_slant_range_km(lat, lon, gs["sat_lon_deg"])
+        dop_hz    = doppler_shift_hz(gs["v_radial_ms"], freq_hz)
 
-    # ── Geometry ──────────────────────────────────────────────────────────────
-    elevation = geo_elevation_deg(lat, lon, gs["sat_lon_deg"])
-    slant_km  = geo_slant_range_km(lat, lon, gs["sat_lon_deg"])
-
-    # ── Fixed propagation terms ───────────────────────────────────────────────
-    path_loss    = fspl_db(freq_hz, slant_km)
+    # ── Fixed propagation terms (non-geometric) ──────────────────────────────
     noise_dbw    = noise_power_dbw(gs["system_temp_k"], bandwidth_hz)
-    gas_loss     = gaseous_absorption_db(freq_ghz, elevation, gs["wv_g_m3"])
     rain_h       = itu_rain_height(lat)
     itu_k, itu_a = itu_rain_coefficients(freq_ghz, polarization)
-    eff_path     = effective_path_length(elevation, rain_h, gs["altitude_km"], itu_k)
-    scint_sig    = scintillation_sigma_db(freq_ghz, elevation,
-                                           gs["antenna_diam_m"], gs["humidity_pct"])
-    dop_hz       = doppler_shift_hz(gs["v_radial_ms"], freq_hz)
     eirp_eff     = gs["eirp_dbw"] + eirp_offset_db
 
     # ── Rain process ──────────────────────────────────────────────────────────
@@ -328,8 +341,25 @@ def simulate_station(gs: dict, *,
                                       rain_rate_scale=rain_rate_scale)
 
     snr_s = []; rain_s = []; rain_db_s = []; scint_s = []; pkt_s = []
+    el_s = []; slant_s = []; dop_s = []
 
     for _ in range(n_steps):
+        # Update Dynamic Geometry
+        if sat_id:
+            geo = propagator.get_geometry(sat_id, curr_time, lat, lon, alt_km)
+            if geo:
+                elevation = geo.elevation_deg
+                slant_km  = geo.slant_range_km
+                dop_hz    = doppler_shift_hz(geo.radial_velocity_ms, freq_hz)
+
+        # Recompute geometry-dependent terms
+        path_loss    = fspl_db(freq_hz, slant_km)
+        gas_loss     = gaseous_absorption_db(freq_ghz, elevation, gs["wv_g_m3"])
+        eff_path     = effective_path_length(elevation, rain_h, alt_km, itu_k)
+        scint_sig    = scintillation_sigma_db(freq_ghz, elevation,
+                                           gs["antenna_diam_m"], gs["humidity_pct"])
+
+        # Rain and Scintillation steps
         rain_rate = rain_proc.step()
         rain_db   = rain_attenuation_db(rain_rate, itu_k, itu_a, eff_path)
         scint_db  = random.gauss(0.0, scint_sig)
@@ -345,21 +375,28 @@ def simulate_station(gs: dict, *,
         snr_s.append(snr);           rain_s.append(rain_rate)
         rain_db_s.append(rain_db);   scint_s.append(scint_db)
         pkt_s.append(packet_loss_from_snr(snr))
+        el_s.append(elevation);      slant_s.append(slant_km); dop_s.append(dop_hz)
+        
+        curr_time += timedelta(seconds=dt_s)
 
     rainy_dbs  = [db for db in rain_db_s if db > 0]
     sorted_snr = sorted(snr_s)
     p10_idx    = max(0, int(0.10 * n_steps) - 1)
 
     return StationResult(
-        name=gs["name"], elevation=elevation, slant_km=slant_km, doppler_hz=dop_hz,
-        path_loss=path_loss, gas_loss=gas_loss, rain_height=rain_h,
-        eff_path=eff_path, itu_k=itu_k, itu_alpha=itu_a, scint_sig=scint_sig,
+        name=gs["name"], elevation=el_s[0], slant_km=slant_s[0], doppler_hz=dop_s[0],
+        path_loss=fspl_db(freq_hz, slant_s[0]), # report initial
+        gas_loss=gaseous_absorption_db(freq_ghz, el_s[0], gs["wv_g_m3"]),
+        rain_height=rain_h,
+        eff_path=effective_path_length(el_s[0], rain_h, alt_km, itu_k),
+        itu_k=itu_k, itu_alpha=itu_a, scint_sig=scintillation_sigma_db(freq_ghz, el_s[0], gs["antenna_diam_m"], gs["humidity_pct"]),
         noise_floor=noise_dbw,
         snr_series=snr_s, rain_series=rain_s, rain_db_series=rain_db_s,
         scint_series=scint_s, pkt_loss_series=pkt_s,
+        elevation_series=el_s, slant_range_series=slant_s, doppler_series=dop_s,
         snr_mean=statistics.mean(snr_s),
         snr_min=min(snr_s),
-        snr_std=statistics.stdev(snr_s),
+        snr_std=statistics.stdev(snr_s) if len(snr_s) > 1 else 0.0,
         snr_p10=sorted_snr[p10_idx],
         rain_fraction=sum(1 for r in rain_s if r > 0) / n_steps,
         avg_rain_db=statistics.mean(rainy_dbs) if rainy_dbs else 0.0,
@@ -382,9 +419,10 @@ def simulate_all(n_steps=DEFAULT_N_STEPS, dt_s=DEFAULT_DT_S,
 
 def _print_station(gs, r):
     W = 92; p = gs["itu_rain"]
+    sat_info = f"NORAD:{gs['norad_id']}" if "norad_id" in gs else f"SatLon:{gs['sat_lon_deg']:+.1f}"
     print("=" * W)
     print(f"  {r.name}  ({gs['latitude']:+.1f}, {gs['longitude']:+.1f})  "
-          f"Sat:{gs['sat_lon_deg']:+.1f}  El:{r.elevation:.1f}°  Range:{r.slant_km:.0f}km")
+          f"{sat_info}  El:{r.elevation:.1f}°  Range:{r.slant_km:.0f}km")
     print(f"  FSPL:{r.path_loss:.2f}dB  Gas:{r.gas_loss:.3f}dB  "
           f"RainH:{r.rain_height:.2f}km  EffPath:{r.eff_path:.2f}km  "
           f"Noise:{r.noise_floor:.1f}dBW")

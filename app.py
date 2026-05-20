@@ -228,7 +228,7 @@ st.dataframe(
 # ║  Time series charts                                                     ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-tab_snr, tab_rain, tab_pkt = st.tabs(["SNR time series", "Rain attenuation", "Packet loss"])
+tab_snr, tab_rain, tab_pkt, tab_geo = st.tabs(["SNR time series", "Rain attenuation", "Packet loss", "Geometry"])
 
 with tab_snr:
     snr_df = pd.DataFrame(
@@ -253,6 +253,14 @@ with tab_pkt:
     pkt_df.index.name = "Step (min)"
     st.line_chart(pkt_df, use_container_width=True)
     st.caption(f"Sigmoid centred at SNR threshold ({SNR_THRESHOLD_DB} dB)")
+
+with tab_geo:
+    geo_df = pd.DataFrame(
+        {row["Station"]: row["_result"].elevation_series for _, row in df_full.iterrows()}
+    )
+    geo_df.index.name = "Step (min)"
+    st.line_chart(geo_df, use_container_width=True)
+    st.caption("Satellite elevation angle (degrees) over time. Static GEOs show a flat line.")
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗

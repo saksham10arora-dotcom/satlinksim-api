@@ -34,6 +34,7 @@ GROUND_STATIONS = [
         "latitude":       28.6,
         "longitude":      77.2,
         "sat_lon_deg":    83.0,
+        "norad_id":       26766,  # INTELSAT 10 (IS-10)
         "altitude_km":    0.216,
         # ITU-R P.837-7 rain quantiles
         "itu_rain": {
