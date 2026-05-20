@@ -58,9 +58,6 @@ The target use case is pre-deployment link budget analysis and what-if scenario 
 ├── app.py                    # Streamlit dashboard — UI, scoring, display
 ├── satellite_link_sim.py     # ITU-R physics engine — core simulation
 ├── ground_stations.py        # Single source of truth: all station parameters
-├── ground_station.py         # (legacy) earlier version of station definitions
-├── groundstations.py         # (legacy) earlier version
-├── groundstation.py          # (legacy) earlier version
 ├── geometry.py               # Geometry helpers used by legacy app.py
 ├── physicsengine.py          # Standalone physics utilities
 ├── propogate.py              # Orbital propagation helpers
@@ -70,8 +67,6 @@ The target use case is pre-deployment link budget analysis and what-if scenario 
 ├── satellites.db             # SQLite database (satellite catalogue)
 ├── train_xgboost.py          # Model training script
 ├── link_training_data.csv    # Training dataset for XGBoost model
-├── feature_scaler.pkl        # Fitted sklearn StandardScaler
-├── xgb_link_model.pkl        # Trained XGBoost regressor
 ├── LICENSE
 └── README.md
 ```
