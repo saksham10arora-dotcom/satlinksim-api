@@ -27,7 +27,9 @@ A physics-first satellite link budget simulator that dynamically integrates **SG
    - [14. Packet Loss Model](#14-packet-loss-model)
 6. [The Simulation Loop & Propagation Pipeline](#the-simulation-loop--propagation-pipeline)
 7. [Machine Learning Pipeline](#machine-learning-pipeline)
-8. [Validation and Correctness](#validation-and-correctness)
+8. [Validation and Benchmarks](#validation-and-benchmarks)
+   - [Validation Suite](#validation-suite)
+   - [Performance Benchmarks](#performance-benchmarks)
 9. [File Reference](#file-reference)
 10. [Ground Station Parameters](#ground-station-parameters)
 11. [UI Controls and What They Change](#ui-controls-and-what-they-change)
@@ -67,11 +69,15 @@ The target use case is pre-deployment link budget analysis and what-if scenario 
 ├── link_quality.py           # Link quality scoring utilities
 ├── train_xgboost.py          # Model training script
 ├── link_training_data.csv    # Training dataset for XGBoost model
-├── val_and_bench/            # Validation suite and plots
+├── val_and_bench/            # Validation suite and Performance Benchmarks
 │   ├── validation_correctness.py
-│   ├── val_autocorr.png
+│   ├── benchmarks.py         # Performance measurement script
+│   ├── val_autocorr.png      # Validation plots
 │   ├── val_geometry.png
-│   └── val_rain_attenuation.png
+│   ├── val_rain_attenuation.png
+│   ├── bench_throughput.png  # Benchmark plots
+│   ├── bench_scaling.png
+│   └── bench_memory.png
 ├── LICENSE
 └── README.md
 ```
@@ -527,33 +533,55 @@ The ML component scores each station's link quality from a single number rather 
 
 ---
 
-## Validation and Correctness
+## Validation and Benchmarks
 
-The simulator includes an automated validation suite to ensure physical models align with ITU standards and analytical references.
+The simulator includes an automated suite to ensure both physical accuracy and computational efficiency.
 
-### 1. Free-Space Path Loss (ITU-R P.525)
-The FSPL implementation is validated against the standard formula: $L_{fs} = 92.45 + 20\log_{10}(f_{GHz}) + 20\log_{10}(d_{km})$.
-- **Result:** Accuracy within $10^{-4}$ dB.
+### Validation Suite
+Located in `val_and_bench/validation_correctness.py`, this suite ensures physical models align with ITU standards and analytical references.
 
-### 2. Rain Attenuation (ITU-R P.838 / P.839)
+#### 1. Free-Space Path Loss (ITU-R P.525)
+Validated against the standard formula: $L_{fs} = 92.45 + 20\log_{10}(f_{GHz}) + 20\log_{10}(d_{km})$. Accuracy within $10^{-4}$ dB.
+
+#### 2. Rain Attenuation (ITU-R P.838 / P.839)
 - **Coefficients:** Specific attenuation coefficients ($k, \alpha$) are verified via log-linear interpolation of ITU-R P.838-3 tables.
-- **Rain Height:** The latitude-dependent rain height model (P.839-4) is tested for climate zone accuracy (e.g., Delhi at 4.58 km).
-- **Sanity Check:** End-to-end attenuation is verified for standard rates (e.g., 25 mm/h).
+- **Rain Height:** Latitude-dependent model (P.839-4) is tested for climate zone accuracy (e.g., Delhi at 4.58 km).
 
 ![Rain Attenuation Validation](val_and_bench/val_rain_attenuation.png)
 
-### 3. Geometry & SGP4
+#### 3. Geometry & SGP4
 - **Slant Range:** Analytical checks for Zenith ($90^\circ$) and Horizon ($0^\circ$) elevations.
-- **SGP4 vs. Analytical:** Cross-validation of SGP4-propagated slant range against spherical Earth analytical models for GEO satellites (e.g., INTELSAT 10).
+- **SGP4 vs. Analytical:** Cross-validation of SGP4-propagated slant range against GEO analytical models.
 
 ![Geometry Validation](val_and_bench/val_geometry.png)
 
-### 4. Stochastic Rain Process (ITU-R P.1853)
-The Maseng-Bakken AR(1) process is validated through:
-- **Autocorrelation:** Empirically measuring the decay constant $\rho = e^{-dt/\tau_c}$ to ensure temporal coherence matches the 5-minute ($\sim 300\text{s}$) physical rain cell correlation time.
-- **Stationary Distribution:** Ensuring the process converges to the correct ITU-R P.837 lognormal mean across varying time steps ($10\text{s}$ to $300\text{s}$).
+#### 4. Stochastic Rain Process (ITU-R P.1853)
+- **Autocorrelation:** Verified decay constant $\rho = e^{-dt/\tau_c}$ matches the 5-minute ($\sim 300\text{s}$) correlation time.
+- **Stationary Distribution:** Convergence to ITU-R P.837 lognormal mean across varying time steps.
 
 ![Autocorrelation Validation](val_and_bench/val_autocorr.png)
+
+### Performance Benchmarks
+Located in `val_and_bench/benchmarks.py`, this script measures the computational profile of the simulation loop.
+
+#### 1. Simulation Throughput
+Measures `timesteps/sec` across varying step counts. The engine achieves approximately **60,000 timesteps/sec** for large simulation windows, ensuring rapid UI responsiveness and batch processing capability.
+
+![Throughput Benchmark](val_and_bench/bench_throughput.png)
+
+#### 2. Runtime Scaling
+Measures execution time as the number of concurrent ground stations increases. The simulation scales linearly, maintaining a profile of ~1.0 ms per 100-step station simulation.
+
+![Scaling Benchmark](val_and_bench/bench_scaling.png)
+
+#### 3. Memory Usage
+Tracks the memory footprint of large simulations. A 500,000-step simulation consumes approximately **122 MB**, which is fully reclaimed after garbage collection.
+
+![Memory Benchmark](val_and_bench/bench_memory.png)
+
+#### 4. Performance Profiling
+- **Propagation Latency:** The SGP4 `get_geometry` call averages **0.018 ms** per invocation.
+- **CPU Profile:** The simulation effectively saturates a single core during heavy execution (100% process CPU utilization).
 
 ---
 
