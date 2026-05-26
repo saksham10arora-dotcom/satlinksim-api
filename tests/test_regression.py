@@ -1,6 +1,12 @@
 import pytest
 import random
+import sys
+import os
 from datetime import datetime, timezone
+
+# Allow standalone execution: add 'src' to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from satellite_link_sim import simulate_station
 from ground_stations import GROUND_STATIONS
 
@@ -49,3 +55,6 @@ def test_snr_summary_stats():
     assert res.snr_mean == statistics.mean(res.snr_series)
     assert res.snr_min == min(res.snr_series)
     assert res.snr_std == statistics.stdev(res.snr_series)
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__]))

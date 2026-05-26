@@ -3,6 +3,12 @@ import math
 import random
 import statistics
 import numpy as np
+import sys
+import os
+
+# Allow standalone execution: add 'src' to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from satellite_link_sim import (
     fspl_db, 
     noise_power_dbw, 
@@ -103,3 +109,6 @@ def test_ar1_correlation_preserved():
     
     # Allow some tolerance for stochasticity
     assert pytest.approx(rho_empirical, abs=0.05) == expected_rho
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__]))
