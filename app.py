@@ -121,8 +121,8 @@ with st.sidebar:
     )
 
     st.divider()
-    st.caption(f"Outage threshold: SNR < {SNR_THRESHOLD_DB:.0f} dB  "
-               f"(Ku-band DVB-S2 practical floor)")
+    st.caption(f"Outage definition: Time-averaged probability of link failure "
+               f"(Sigmoid centred at {SNR_THRESHOLD_DB:.0f} dB)")
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
