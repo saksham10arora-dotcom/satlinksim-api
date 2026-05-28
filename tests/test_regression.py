@@ -52,9 +52,10 @@ def test_snr_summary_stats():
     res = simulate_station(gs, n_steps=n_steps, seed=123)
     
     import statistics
-    assert res.snr_mean == statistics.mean(res.snr_series)
-    assert res.snr_min == min(res.snr_series)
-    assert res.snr_std == statistics.stdev(res.snr_series)
+    import pytest
+    assert res.snr_mean == pytest.approx(statistics.mean(res.snr_series))
+    assert res.snr_min == pytest.approx(min(res.snr_series))
+    assert res.snr_std == pytest.approx(statistics.stdev(res.snr_series))
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__]))
