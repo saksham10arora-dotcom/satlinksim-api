@@ -2,6 +2,8 @@ import math
 import numpy as np
 import sqlite3
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from sgp4.api import Satrec, jday
@@ -56,6 +58,7 @@ class Propagator:
             db_path = os.path.join(os.path.dirname(__file__), "satellites.db")
         self.db_path = db_path
         self.cache = {}
+        self._executor = ThreadPoolExecutor(max_workers=os.cpu_count())
 
     def get_sat_rec(self, identifier):
         """Fetch Satrec by name or norad_id."""
@@ -100,8 +103,6 @@ class Propagator:
         # pos/vel are (n, 3)
         error, sat_pos, sat_vel = sat.sgp4_array(jds, frs)
         if np.any(error != 0): 
-            # If any step fails, we might want to handle it more gracefully, 
-            # but for now return None if any error occurs
             return None
         
         # Ground station ECEF
@@ -131,6 +132,15 @@ class Propagator:
             azimuth_deg=np.degrees(az)
         )
 
+    async def get_geometry_batch_async(self, identifier, dts: list[datetime], gs_lat, gs_lon, gs_alt):
+        """Async wrapper for get_geometry_batch, running in a thread pool."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            self._executor, 
+            self.get_geometry_batch, 
+            identifier, dts, gs_lat, gs_lon, gs_alt
+        )
+
     def get_geometry(self, identifier, dt: datetime, gs_lat, gs_lon, gs_alt):
         """Maintains backward compatibility for single-step calls."""
         res = self.get_geometry_batch(identifier, [dt], gs_lat, gs_lon, gs_alt)
@@ -141,3 +151,4 @@ class Propagator:
             radial_velocity_ms=res.radial_velocity_ms[0],
             azimuth_deg=res.azimuth_deg[0]
         )
+
