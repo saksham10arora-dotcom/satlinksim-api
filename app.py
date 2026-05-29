@@ -19,10 +19,14 @@ ML feature vector (matches trained scaler/model schema):
 import streamlit as st
 import pandas as pd
 import joblib
+import asyncio
+import numpy as np
+import matplotlib.pyplot as plt
 
 from ground_stations import GROUND_STATIONS
 from satellite_link_sim import (
-    simulate_station, StationResult,
+    simulate_station, StationResult, simulate_all_batched,
+    simulate_all_concurrent, run_monte_carlo,
     DEFAULT_CARRIER_FREQ_HZ, DEFAULT_BANDWIDTH_HZ, DEFAULT_POLARIZATION,
     DEFAULT_N_STEPS, SNR_THRESHOLD_DB,
 )
@@ -51,7 +55,7 @@ st.set_page_config(page_title="Satellite Link Simulator", layout="wide")
 st.title("Multi-Ground-Station Link Quality Simulator")
 st.caption(
     "Physics: ITU-R P.837 / P.838 / P.839 / P.618 / P.676 / P.1853  "
-    "·  ML scorer: XGBoost"
+    "·  ML scorer: XGBoost  ·  Parallelism: Multiprocessing + Async"
 )
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -63,27 +67,21 @@ with st.sidebar:
     freq_ghz = st.slider(
         "Carrier frequency (GHz)",
         min_value=10.0, max_value=30.0, value=14.0, step=0.5,
-        help="Changes FSPL (+20 dB/decade), P.838 k/α coefficients, and gaseous absorption.",
     )
 
     polarization = st.radio(
         "Polarization",
         ["vertical", "horizontal"],
-        help="Switches ITU-R P.838 k/α coefficients. "
-             "Horizontal polarization has higher rain attenuation.",
     )
 
     bw_mhz = st.slider(
         "Transponder bandwidth (MHz)",
         min_value=18, max_value=72, value=36, step=9,
-        help="Wider bandwidth raises the thermal noise floor (kTB), reducing SNR.",
     )
 
     eirp_offset = st.slider(
         "EIRP offset (dB)",
         min_value=-10.0, max_value=10.0, value=0.0, step=0.5,
-        help="Simulates power amplifier headroom (+) or deliberate power reduction (−). "
-             "Applied on top of each station's rated EIRP.",
     )
 
     st.divider()
@@ -92,67 +90,65 @@ with st.sidebar:
     weather = st.radio(
         "Weather mode",
         ["Clear (probabilistic)", "Rain (forced)"],
-        help="Clear uses the ITU-R P.837 Markov onset probability. "
-             "Rain forces the AR(1) process into its raining state every step.",
     )
     force_rain = weather.startswith("Rain")
 
     rain_scale = st.slider(
         "Rain intensity scale",
         min_value=0.5, max_value=3.0, value=1.0, step=0.25,
-        help="Multiplier on ITU-R P.837-7 rain rates. "
-             "1.0 = climatological average. "
-             "2.0 = severe event (roughly equivalent to a tropical squall). "
-             "Only affects results when rain is active.",
         disabled=not force_rain,
     )
 
     st.divider()
-    st.header("Simulation")
+    st.header("Simulation & Parallelism")
+
+    sim_mode = st.selectbox(
+        "Execution Mode",
+        ["Standard (Batched NumPy)", "Concurrent (Async Propagation)", "Monte Carlo (Multiprocessing)"],
+        help="Standard: Vectorized NumPy. Concurrent: Async I/O for propagation. Monte Carlo: Parallel processes."
+    )
 
     n_steps = st.slider(
         "Window (minutes)", min_value=10, max_value=180, value=60, step=10,
-        help="Each step is 60 s. Longer windows average out short rain events.",
     )
+
+    mc_iterations = 1
+    if sim_mode == "Monte Carlo (Multiprocessing)":
+        mc_iterations = st.slider("MC Iterations", 2, 20, 5)
 
     load = st.slider(
         "Network load", min_value=0.0, max_value=1.0, value=0.4, step=0.05,
-        help="Fraction of link capacity in use — fed directly to the ML model.",
     )
-
-    st.divider()
-    st.caption(f"Outage definition: Time-averaged probability of link failure "
-               f"(Sigmoid centred at {SNR_THRESHOLD_DB:.0f} dB)")
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Run simulation                                                         ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-@st.cache_data(show_spinner="Running ITU-R physics simulation…")
-def run_all(n_steps, force_rain, freq_hz, polarization,
-            bandwidth_hz, eirp_offset_db, rain_rate_scale):
-    """
-    Cache key covers every physical parameter that changes simulation output.
-    Changing only 'load' re-scores without re-simulating.
-    """
-    out = []
-    for gs in GROUND_STATIONS:
-        r = simulate_station(
-            gs,
-            n_steps         = n_steps,
-            force_rain      = force_rain,
-            seed            = hash(gs["name"]) % 100_000,
-            freq_hz         = freq_hz,
-            eirp_offset_db  = eirp_offset_db,
-            bandwidth_hz    = bandwidth_hz,
-            polarization    = polarization,
-            rain_rate_scale = rain_rate_scale,
-        )
-        out.append((gs, r))
-    return out
+@st.cache_data(show_spinner="Running physics simulation…")
+def run_simulation(sim_mode, mc_iterations, n_steps, force_rain, freq_hz, 
+                   polarization, bandwidth_hz, eirp_offset_db, rain_rate_scale):
+    
+    kwargs = dict(
+        n_steps         = n_steps,
+        force_rain      = force_rain,
+        freq_hz         = freq_hz,
+        eirp_offset_db  = eirp_offset_db,
+        bandwidth_hz    = bandwidth_hz,
+        polarization    = polarization,
+        rain_rate_scale = rain_rate_scale,
+    )
+    
+    if sim_mode == "Monte Carlo (Multiprocessing)":
+        return run_monte_carlo(mc_iterations, GROUND_STATIONS, **kwargs)
+    elif sim_mode == "Concurrent (Async Propagation)":
+        return [asyncio.run(simulate_all_concurrent(GROUND_STATIONS, **kwargs))]
+    else:
+        return [simulate_all_batched(GROUND_STATIONS, **kwargs)]
 
-sim_results = run_all(
+all_iterations_results = run_simulation(
+    sim_mode        = sim_mode,
+    mc_iterations   = mc_iterations,
     n_steps         = n_steps,
     force_rain      = force_rain,
     freq_hz         = freq_ghz * 1e9,
@@ -162,13 +158,16 @@ sim_results = run_all(
     rain_rate_scale = rain_scale if force_rain else 1.0,
 )
 
+# Use the first iteration for the main display
+sim_results = all_iterations_results[0]
+
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Score and build display table                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 rows = []
-for gs, r in sim_results:
+for r in sim_results:
     score = score_station(r, load)
     rows.append({
         "Station":             r.name,
@@ -208,10 +207,31 @@ st.divider()
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Monte Carlo Analysis (If active)                                       ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+if sim_mode == "Monte Carlo (Multiprocessing)":
+    st.subheader("Monte Carlo Quality Distribution")
+    mc_scores = []
+    for iteration in all_iterations_results:
+        iter_scores = {r.name: score_station(r, load) for r in iteration}
+        mc_scores.append(iter_scores)
+    
+    mc_df = pd.DataFrame(mc_scores)
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    mc_df.boxplot(ax=ax)
+    ax.set_ylabel("Link Quality Score")
+    ax.set_title(f"Score Distribution across {mc_iterations} Parallel Iterations")
+    st.pyplot(fig)
+    st.divider()
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Ranked table                                                           ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-st.subheader("Station ranking")
+st.subheader("Station ranking (Iteration 1)")
 st.dataframe(
     df_display.style
         .background_gradient(subset=["Link quality"],        cmap="RdYlGn")
@@ -236,7 +256,6 @@ with tab_snr:
     )
     snr_df.index.name = "Step (min)"
     st.line_chart(snr_df, use_container_width=True)
-    st.caption(f"Dashed reference: outage threshold = {SNR_THRESHOLD_DB} dB")
 
 with tab_rain:
     rain_df = pd.DataFrame(
@@ -244,7 +263,6 @@ with tab_rain:
     )
     rain_df.index.name = "Step (min)"
     st.line_chart(rain_df, use_container_width=True)
-    st.caption("ITU-R P.838-3: A = k · R^α · L_eff  [dB]")
 
 with tab_pkt:
     pkt_df = pd.DataFrame(
@@ -252,7 +270,6 @@ with tab_pkt:
     )
     pkt_df.index.name = "Step (min)"
     st.line_chart(pkt_df, use_container_width=True)
-    st.caption(f"Sigmoid centred at SNR threshold ({SNR_THRESHOLD_DB} dB)")
 
 with tab_geo:
     geo_df = pd.DataFrame(
@@ -260,7 +277,6 @@ with tab_geo:
     )
     geo_df.index.name = "Step (min)"
     st.line_chart(geo_df, use_container_width=True)
-    st.caption("Satellite elevation angle (degrees) over time. Static GEOs show a flat line.")
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
