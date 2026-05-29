@@ -24,7 +24,7 @@ graph TD
 ## High-Performance Engineering
 The simulator has transitioned from a scalar loop to a **vectorized matrix engine** to achieve significant performance gains:
 - **NumPy Vectorization**: Link budget calculations are processed as matrix operations, achieving a **~10x speedup** over scalar implementations.
-- **Async Concurrency**: `asyncio` is used to coordinate concurrent propagation workflows, reducing initialization latency for multi-station scenarios.
+- **Async Concurrency**: Asyncio coordinates concurrent propagation workflows for multi-station simulations.
 - **Multiprocessing**: Monte Carlo iterations are distributed across CPU cores using `ProcessPoolExecutor`, achieving a **~2.5x speedup** on typical 8-core systems.
 
 *Note: Performance figures are derived from the [Benchmark Suite](benchmarks.md).*
@@ -41,7 +41,7 @@ The core of the simulator is a stateful time-series engine. For each timestep in
 
 ## Simulation Workflow
 1. **Initialize**: Load satellite TLEs and ground station parameters from SQLite.
-2. **Parallel Execution**: Compute orbital states and stochastic rain realizations across available cores/threads.
+2. **Parallel Execution**: Distribute independent simulation workloads across available CPU cores for large-scale availability studies.
 3. **Matrix Processing**: Apply vectorized atmospheric models across the entire time series.
 4. **ML Inference**: Extract features and score the station using the pre-trained XGBoost model.
 5. **Dashboard Rendering**: Present interactive charts and comparative rankings in the UI.
