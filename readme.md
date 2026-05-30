@@ -15,14 +15,15 @@ Physics-first satellite link simulator integrating:
 ---
 
 ### Architecture
-```text
-TLE ↓
-SGP4 ↓
-Geometry ↓
-ITU-R Models ↓
-Link Budget ↓
-ML Scoring ↓
-Dashboard
+
+```mermaid
+graph TD
+    A[TLE Catalog] --> B[SGP4 Propagation]
+    B --> C[Geometry Engine]
+    C --> D[ITU-R Models]
+    D --> E[Link Budget]
+    E --> F[ML Scoring]
+    F --> G[Dashboard]
 ```
 
 ---
@@ -45,7 +46,7 @@ python3 satellite_link_sim.py
 ### Key Features
 The simulator computes a full high-fidelity link budget at each time step, tracking everything from geometric path loss and gaseous absorption to rapid tropospheric scintillation. It transitions beyond static GEO assumptions by utilizing live TLE data and SGP4 propagation to model dynamic LEO/MEO constellations.
 
-The engine is engineered for massive throughput, utilizing **NumPy vectorization** for matrix-based link calculations, **Async concurrency** for overlapping orbital tasks, and **Multiprocessing** for large-scale Monte Carlo availability studies.
+The simulation engine combines NumPy vectorization, async orbital propagation, and multiprocessing-based Monte Carlo execution to support large-scale availability studies while maintaining interactive performance.
 
 ---
 
