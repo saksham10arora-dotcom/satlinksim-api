@@ -7,12 +7,13 @@ The simulator is designed for scalable simulation workloads through vectorizatio
 ```mermaid
 graph TD
     A[TLE Catalog / satellites.db] --> B[SGP4 Propagation]
-    B --> C[Geometry Engine]
-    C --> D[ITU-R Models]
-    D --> E[Link Budget Engine]
-    E --> F[Feature Extraction]
-    F --> G[XGBoost Scoring]
-    G --> H[Streamlit Dashboard]
+    B --> C[Handoff Manager]
+    C --> D[Geometry Engine]
+    D --> E[ITU-R Models]
+    E --> F[Link Budget Engine]
+    F --> G[Feature Extraction]
+    G --> H[XGBoost Scoring]
+    H --> I[Streamlit Dashboard]
 ```
 
 ## Core Modules
@@ -32,12 +33,13 @@ The simulator has transitioned from a scalar loop to a **vectorized matrix engin
 ## The Timestep Simulation Loop
 The core of the simulator is a stateful time-series engine. For each timestep in the simulation window:
 
-1. **Propagate**: Update satellite ECEF state using SGP4 orbital kernels.
-2. **Geometry**: Recompute range, elevation, and Doppler shift based on relative motion.
-3. **Atmospheric Models**: Evaluate frequency- and angle-dependent losses (FSPL, Gas, Scintillation).
-4. **Rain Dynamics**: Advance the Maseng-Bakken correlated rain process (AR(1)) to model fade persistence.
-5. **Link Budget**: Consolidated SNR calculation including hardware gains and noise floor.
-6. **Aggregate**: Collect time-series metrics (SNR, packet loss) for final scoring and visualization.
+1. **Propagate**: Update candidate satellite ECEF states using SGP4 orbital kernels.
+2. **Handoff**: Evaluate switching logic (Hysteresis/Dwell) to select the optimal active satellite.
+3. **Geometry**: Recompute range, elevation, and Doppler shift for the selected satellite.
+4. **Atmospheric Models**: Evaluate frequency- and angle-dependent losses (FSPL, Gas, Scintillation).
+5. **Rain Dynamics**: Advance the Maseng-Bakken correlated rain process (AR(1)).
+6. **Link Budget**: Consolidated SNR calculation including hardware gains and noise floor.
+7. **Aggregate**: Collect time-series metrics (SNR, packet loss) for final scoring.
 
 ## Simulation Workflow
 1. **Initialize**: Load satellite TLEs and ground station parameters from SQLite.
