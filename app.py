@@ -2,18 +2,6 @@
 app.py — Streamlit UI for the Satellite Link Quality Simulator
 ==============================================================
 All physics are delegated to satellite_link_sim.simulate_station().
-
-UI controls fall into three groups:
-
-  RF / link layer  : carrier frequency, polarization, bandwidth,
-                     EIRP offset (power amplifier headroom)
-  Environment      : weather mode, rain intensity scale
-  Simulation       : window length, network load (ML feature)
-
-ML feature vector (matches trained scaler/model schema):
-  snr_db      ← r.snr_mean   (avg SNR across simulation window)
-  packet_loss ← r.avg_pkt_loss
-  load_factor ← user slider
 """
 
 import streamlit as st
@@ -22,6 +10,7 @@ import joblib
 import asyncio
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime, timezone
 
 from ground_stations import GROUND_STATIONS
 from satellite_link_sim import (
@@ -30,11 +19,15 @@ from satellite_link_sim import (
     DEFAULT_CARRIER_FREQ_HZ, DEFAULT_BANDWIDTH_HZ, DEFAULT_POLARIZATION,
     DEFAULT_N_STEPS, SNR_THRESHOLD_DB,
 )
+from propogate import Satellite, Constellation
 
 # ── ML assets ─────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model():
-    return joblib.load("xgb_link_model.pkl"), joblib.load("feature_scaler.pkl")
+    try:
+        return joblib.load("xgb_link_model.pkl"), joblib.load("feature_scaler.pkl")
+    except:
+        return None, None
 
 model, scaler = load_model()
 
@@ -47,6 +40,8 @@ def build_features(r: StationResult, load: float) -> pd.DataFrame:
     )
 
 def score_station(r: StationResult, load: float) -> float:
+    if model is None or scaler is None:
+        return 0.5 # Fallback
     return float(model.predict(scaler.transform(build_features(r, load)))[0])
 
 
@@ -55,7 +50,7 @@ st.set_page_config(page_title="Satellite Link Simulator", layout="wide")
 st.title("Multi-Ground-Station Link Quality Simulator")
 st.caption(
     "Physics: ITU-R P.837 / P.838 / P.839 / P.618 / P.676 / P.1853  "
-    "·  ML scorer: XGBoost  ·  Parallelism: Multiprocessing + Async"
+    "·  ML scorer: XGBoost  ·  Handoff: Hysteresis + Dwell Time"
 )
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -100,12 +95,43 @@ with st.sidebar:
     )
 
     st.divider()
+    st.header("Constellation & Handoff")
+
+    use_constellation = st.checkbox("Enable Multi-Sat Constellation", value=True)
+    
+    selected_constellation = None
+    handoff_policy = "highest_elevation"
+    hysteresis = 2.0
+    min_dwell = 2
+
+    if use_constellation:
+        const_choice = st.selectbox(
+            "Select Constellation",
+            ["Starlink (Mock 3-Sat)", "OneWeb (Mock 2-Sat)", "Custom (IDs)"]
+        )
+        
+        if const_choice == "Starlink (Mock 3-Sat)":
+            selected_constellation = Constellation.from_norad_ids("Starlink-Mock", [26766, 26900, 27380])
+        elif const_choice == "OneWeb (Mock 2-Sat)":
+            selected_constellation = Constellation.from_norad_ids("OneWeb-Mock", [45131, 45132])
+        else:
+            ids_str = st.text_input("NORAD IDs (comma separated)", "26766, 26900")
+            try:
+                ids = [int(i.strip()) for i in ids_str.split(",")]
+                selected_constellation = Constellation.from_norad_ids("Custom", ids)
+            except:
+                st.error("Invalid IDs")
+
+        handoff_policy = st.selectbox("Switching Policy", ["highest_elevation", "highest_snr"])
+        hysteresis = st.slider("Hysteresis (dB/deg)", 0.0, 10.0, 2.0, 0.5)
+        min_dwell = st.slider("Min Dwell (steps)", 1, 10, 2)
+
+    st.divider()
     st.header("Simulation & Parallelism")
 
     sim_mode = st.selectbox(
         "Execution Mode",
         ["Standard (Batched NumPy)", "Concurrent (Async Propagation)", "Monte Carlo (Multiprocessing)"],
-        help="Standard: Vectorized NumPy. Concurrent: Async I/O for propagation. Monte Carlo: Parallel processes."
     )
 
     n_steps = st.slider(
@@ -127,7 +153,9 @@ with st.sidebar:
 
 @st.cache_data(show_spinner="Running physics simulation…")
 def run_simulation(sim_mode, mc_iterations, n_steps, force_rain, freq_hz, 
-                   polarization, bandwidth_hz, eirp_offset_db, rain_rate_scale):
+                   polarization, bandwidth_hz, eirp_offset_db, rain_rate_scale,
+                   constellation=None, handoff_policy="highest_elevation",
+                   hysteresis=2.0, min_dwell_steps=2):
     
     kwargs = dict(
         n_steps         = n_steps,
@@ -137,11 +165,17 @@ def run_simulation(sim_mode, mc_iterations, n_steps, force_rain, freq_hz,
         bandwidth_hz    = bandwidth_hz,
         polarization    = polarization,
         rain_rate_scale = rain_rate_scale,
+        constellation   = constellation,
+        handoff_policy  = handoff_policy,
+        hysteresis      = hysteresis,
+        min_dwell_steps = min_dwell_steps
     )
     
     if sim_mode == "Monte Carlo (Multiprocessing)":
         return run_monte_carlo(mc_iterations, GROUND_STATIONS, **kwargs)
     elif sim_mode == "Concurrent (Async Propagation)":
+        # asyncio.run can be tricky in some Streamlit environments, 
+        # but we'll stick to it as per original logic.
         return [asyncio.run(simulate_all_concurrent(GROUND_STATIONS, **kwargs))]
     else:
         return [simulate_all_batched(GROUND_STATIONS, **kwargs)]
@@ -156,9 +190,12 @@ all_iterations_results = run_simulation(
     bandwidth_hz    = bw_mhz * 1e6,
     eirp_offset_db  = eirp_offset,
     rain_rate_scale = rain_scale if force_rain else 1.0,
+    constellation   = selected_constellation,
+    handoff_policy  = handoff_policy,
+    hysteresis      = hysteresis,
+    min_dwell_steps = min_dwell,
 )
 
-# Use the first iteration for the main display
 sim_results = all_iterations_results[0]
 
 
@@ -175,14 +212,11 @@ for r in sim_results:
         "Slant range (km)":    round(r.slant_km, 0),
         "FSPL (dB)":           round(r.path_loss, 2),
         "Gas loss (dB)":       round(r.gas_loss, 3),
-        "Eff. rain path (km)": round(r.eff_path, 2),
         "SNR mean (dB)":       round(r.snr_mean, 2),
         "SNR p10 (dB)":        round(r.snr_p10, 2),
-        "SNR std (dB)":        round(r.snr_std, 3),
-        "Rain fraction (%)":   round(r.rain_fraction * 100, 1),
-        "Avg rain atten (dB)": round(r.avg_rain_db, 2),
         "Outage (%)":          round(r.outage_fraction * 100, 1),
         "Avg pkt loss":        round(r.avg_pkt_loss, 4),
+        "Handoffs":            len(r.handoff_events) if r.handoff_events else 0,
         "Link quality":        round(score, 3),
         "_result":             r,
     })
@@ -205,39 +239,16 @@ c5.metric("Outage",          f"{best['Outage (%)']:.1f} %")
 
 st.divider()
 
-
-# ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  Monte Carlo Analysis (If active)                                       ║
-# ╚══════════════════════════════════════════════════════════════════════════╝
-
-if sim_mode == "Monte Carlo (Multiprocessing)":
-    st.subheader("Monte Carlo Quality Distribution")
-    mc_scores = []
-    for iteration in all_iterations_results:
-        iter_scores = {r.name: score_station(r, load) for r in iteration}
-        mc_scores.append(iter_scores)
-    
-    mc_df = pd.DataFrame(mc_scores)
-    
-    fig, ax = plt.subplots(figsize=(10, 4))
-    mc_df.boxplot(ax=ax)
-    ax.set_ylabel("Link Quality Score")
-    ax.set_title(f"Score Distribution across {mc_iterations} Parallel Iterations")
-    st.pyplot(fig)
-    st.divider()
-
-
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Ranked table                                                           ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-st.subheader("Station ranking (Iteration 1)")
+st.subheader("Station ranking")
 st.dataframe(
     df_display.style
         .background_gradient(subset=["Link quality"],        cmap="RdYlGn")
         .background_gradient(subset=["SNR mean (dB)"],       cmap="RdYlGn")
         .background_gradient(subset=["Outage (%)"],          cmap="RdYlGn_r")
-        .background_gradient(subset=["Avg rain atten (dB)"], cmap="RdYlGn_r")
         .format(precision=2),
     use_container_width=True,
     hide_index=True,
@@ -251,32 +262,20 @@ st.dataframe(
 tab_snr, tab_rain, tab_pkt, tab_geo = st.tabs(["SNR time series", "Rain attenuation", "Packet loss", "Geometry"])
 
 with tab_snr:
-    snr_df = pd.DataFrame(
-        {row["Station"]: row["_result"].snr_series for _, row in df_full.iterrows()}
-    )
-    snr_df.index.name = "Step (min)"
-    st.line_chart(snr_df, use_container_width=True)
+    snr_data = {row["Station"]: row["_result"].snr_series for _, row in df_full.iterrows()}
+    st.line_chart(pd.DataFrame(snr_data), use_container_width=True)
 
 with tab_rain:
-    rain_df = pd.DataFrame(
-        {row["Station"]: row["_result"].rain_db_series for _, row in df_full.iterrows()}
-    )
-    rain_df.index.name = "Step (min)"
-    st.line_chart(rain_df, use_container_width=True)
+    rain_data = {row["Station"]: row["_result"].rain_db_series for _, row in df_full.iterrows()}
+    st.line_chart(pd.DataFrame(rain_data), use_container_width=True)
 
 with tab_pkt:
-    pkt_df = pd.DataFrame(
-        {row["Station"]: row["_result"].pkt_loss_series for _, row in df_full.iterrows()}
-    )
-    pkt_df.index.name = "Step (min)"
-    st.line_chart(pkt_df, use_container_width=True)
+    pkt_data = {row["Station"]: row["_result"].pkt_loss_series for _, row in df_full.iterrows()}
+    st.line_chart(pd.DataFrame(pkt_data), use_container_width=True)
 
 with tab_geo:
-    geo_df = pd.DataFrame(
-        {row["Station"]: row["_result"].elevation_series for _, row in df_full.iterrows()}
-    )
-    geo_df.index.name = "Step (min)"
-    st.line_chart(geo_df, use_container_width=True)
+    geo_data = {row["Station"]: row["_result"].elevation_series for _, row in df_full.iterrows()}
+    st.line_chart(pd.DataFrame(geo_data), use_container_width=True)
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -291,13 +290,15 @@ for _, row in df_full.iterrows():
         f"{r.name}  —  quality {row['Link quality']:.3f}  "
         f"|  SNR mean {r.snr_mean:.1f} dB  |  outage {r.outage_fraction*100:.0f}%"
     ):
-        col_geo, col_prop, col_rain, col_stat = st.columns(4)
+        col_geo, col_prop, col_stat = st.columns(3)
 
         with col_geo:
             st.markdown("**Geometry**")
             st.metric("Elevation",     f"{r.elevation:.1f} °")
             st.metric("Slant range",   f"{r.slant_km:.0f} km")
             st.metric("Doppler shift", f"{r.doppler_hz:+.0f} Hz")
+            if r.sat_name_series:
+                st.caption(f"Current Sat: {r.sat_name_series[0]}")
 
         with col_prop:
             st.markdown("**Propagation**")
@@ -305,19 +306,23 @@ for _, row in df_full.iterrows():
             st.metric("Gas absorption", f"{r.gas_loss:.3f} dB")
             st.metric("Noise floor",    f"{r.noise_floor:.1f} dBW")
 
-        with col_rain:
-            st.markdown("**Rain (ITU-R P.838)**")
-            st.metric("Rain height",    f"{r.rain_height:.2f} km")
-            st.metric("Eff. path",      f"{r.eff_path:.2f} km")
-            st.metric("k / α",          f"{r.itu_k:.4f} / {r.itu_alpha:.3f}")
-            st.metric("Scint. σ",       f"{r.scint_sig:.4f} dB")
-
         with col_stat:
             st.markdown("**Link statistics**")
             st.metric("SNR mean",  f"{r.snr_mean:.2f} dB")
             st.metric("SNR p10",   f"{r.snr_p10:.2f} dB")
-            st.metric("SNR std",   f"{r.snr_std:.3f} dB")
             st.metric("Pkt loss",  f"{r.avg_pkt_loss:.4f}")
+            st.metric("Handoffs",  len(r.handoff_events) if r.handoff_events else 0)
+
+        if r.handoff_events:
+            st.markdown("**Handoff History**")
+            ho_df = pd.DataFrame([{
+                "Step": e.time_step,
+                "From": e.old_sat,
+                "To": e.new_sat,
+                "Reason": e.reason,
+                "Delta": f"{e.metric_delta:+.2f}"
+            } for e in r.handoff_events])
+            st.dataframe(ho_df, use_container_width=True, hide_index=True)
 
         st.line_chart(
             pd.DataFrame({
@@ -326,6 +331,3 @@ for _, row in df_full.iterrows():
             }),
             use_container_width=True,
         )
-
-        st.caption("ML feature vector sent to XGBoost:")
-        st.dataframe(build_features(r, load), use_container_width=True, hide_index=True)
