@@ -4,15 +4,6 @@ The benchmark suite evaluates throughput, parallel scalability,
 and memory efficiency of the simulation engine under realistic
 satellite communication workloads.
 
-## Benchmark Summary
-
-| Metric | Result |
-|----------|---------|
-| Throughput | 60,000 timesteps/sec |
-| SGP4 Latency | 18 µs |
-| Memory Usage | 122 MB @ 500k steps |
-| Monte Carlo Speedup | 2.5× (12 workers) |
-
 ## Benchmark Environment
 
 - CPU: Intel i5 13420H
@@ -31,31 +22,59 @@ Unless otherwise stated:
 - Memory measurements were obtained using `psutil`.
 - Results represent wall-clock execution time.
 
-## 1. Simulation Throughput
-The vectorized NumPy engine achieves approximately **60,000 timesteps/sec** for sequential execution. This high throughput is achieved by minimizing Python-level loops and maximizing cache locality through contiguous memory access.
+## 1. Performance Validation
+
+### 1.1 Simulation Throughput
+The vectorized NumPy engine achieves approximately **275,000 timesteps/sec** for sequential execution (single satellite). This high throughput is achieved by minimizing Python-level loops and maximizing cache locality through contiguous memory access.
 
 ![Throughput Benchmark](../val_and_bench/bench_throughput.png)
 *Figure 1: Simulation throughput as a function of the total number of timesteps. Performance stabilizes for windows exceeding 1,000 steps.*
 
-## 2. Parallel Scaling Analysis
+### 1.2 Parallel Scaling
 The system demonstrates strong speedup for Monte Carlo iterations by distributing independent rain realizations across multiple CPU cores.
-- **Speedup**: ~2.5x speedup for typical workloads using multiprocessing with 12 workers.
-- **Efficiency**: Peak efficiency of ~60% was observed at low worker counts. Scaling plateaus at higher worker counts due to process startup costs and inter-process communication overhead.
 
-![Parallel Scaling](../val_and_bench/bench_parallel_scaling.png)
-*Figure 2: Execution time reduction and speedup factor for Monte Carlo iterations. Note the near-linear scaling for small worker pools.*
+| Workers | Speedup | Efficiency |
+| ------- | ------- | ---------- |
+| 1       | 1.0     | 100%       |
+| 2       | 1.6     | 80%        |
+| 4       | 2.4     | 59%        |
+| 8       | 3.0     | 38%        |
+| 12      | 3.4     | 28%        |
 
-![Worker Efficiency](../val_and_bench/bench_worker_efficiency.png)
-*Figure 3: Efficiency factor per worker. Maintaining high granularity in the simulation window ensures optimal utilization of multi-core hardware.*
 
-## 3. Propagation Latency
-Individual SGP4 propagation calls average 18 µs per invocation,
-enabling rapid geometry updates for large simulation windows.
+### 1.3 Runtime Breakdown
+Profiling of the full constellation/handoff pipeline (14 GHz, 50k steps) reveals the following computational distribution:
 
-## 4. Memory Efficiency
-The simulator is designed for a low memory footprint. A 500,000-step simulation (approx. 1 year of 1-minute data for one station) consumes only **122 MB** of RAM. All simulation data is stored in compact NumPy arrays, ensuring efficient memory management and rapid garbage collection.
+| Component       | Runtime Share |
+| --------------- | ------------- |
+| SGP4 / Geometry | 24.9%         |
+| Rain Process    | 63.1%         |
+| Link Budget     | 1.2%          |
+| Handoff         | 10.8%         |
+
+*Note: The Rain Process remains the primary sequential bottleneck due to the AR(1) state dependence, despite station-level vectorization.*
+
+### 1.4 Memory Scaling
+The simulator is designed for a low memory footprint. A 500,000-step simulation (approx. 1 year of 1-minute data for one station) consumes only **122 MB** of RAM.
 
 ![Memory Benchmark](../val_and_bench/bench_memory.png)
-*Figure 4: Memory usage delta vs. simulation step count. The linear relationship confirms predictable resource consumption for long-duration studies.*
+*Figure 2: Memory usage delta vs. simulation step count.*
+
+---
+
+## 2. System Architecture Evolution
+The simulator has evolved from a simple scalar model to a highly complex, stateful constellation manager. Despite the increased complexity, the system maintains high performance through aggressive vectorization.
+
+| Version | Throughput | Description |
+| ------------- | ---------- | ----------- |
+| **Scalar** | ~6k/s | Legacy baseline (pre-vectorization) |
+| **Vectorized** | ~275k/s | Current NumPy-optimized core (single sat) |
+| **Constellation**| ~60k/s | Vectorized + Dynamic Multi-Sat Geometry |
+| **Handoff** | ~59k/s | Full pipeline + Stateful Switch Policies |
+
+### Performance Analysis
+- **Vectorization Gain**: Transitioning from scalar loops to NumPy operations provided a **~45x performance boost**.
+- **Constellation Overhead**: Introducing dynamic multi-satellite propagation (SGP4) for every station significantly increases CPU load per timestep. However, the system still achieves **60,000 steps/sec**, which is equivalent to simulating a full year of 1-minute data for one station in less than 10 seconds.
+- **Handoff Stability**: The Handoff Manager (Hysteresis, Dwell Time) introduces negligible overhead (~1.6%) while providing realistic connection stability and preventing "ping-pong" switching between satellites.
 
 
