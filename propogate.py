@@ -103,6 +103,35 @@ def ecef_to_enu_matrix(lat_deg, lon_deg):
         [cos_lat * cos_lon,  cos_lat * sin_lon,  sin_lat]
     ])
 
+def get_gmst(jds, frs):
+    """Calculate Greenwich Mean Sidereal Time (GMST) in radians. Supports arrays."""
+    # From Vallado, Fundamentals of Astrodynamics and Applications
+    # t = (jd_ut1 - 2451545.0) / 36525.0
+    t = (jds + frs - 2451545.0) / 36525.0
+    # GMST in seconds
+    gmst_s = 67310.54841 + (876600.0 * 3600 + 8640184.812866) * t + 0.093104 * t**2 - 6.2e-6 * t**3
+    # Convert to radians and normalize
+    return (gmst_s * (np.pi / 180.0) / 240.0) % (2 * np.pi)
+
+def rotate_teme_to_ecef(pos_teme, vel_teme, gmst):
+    """Rotate TEME vectors to ECEF. Supports arrays."""
+    cos_g = np.cos(gmst)
+    sin_g = np.sin(gmst)
+    
+    # Position rotation
+    x = pos_teme[:, 0] * cos_g + pos_teme[:, 1] * sin_g
+    y = -pos_teme[:, 0] * sin_g + pos_teme[:, 1] * cos_g
+    z = pos_teme[:, 2]
+    pos_ecef = np.stack([x, y, z], axis=-1)
+    
+    # Velocity rotation (inertial velocity in ECEF frame)
+    vx = vel_teme[:, 0] * cos_g + vel_teme[:, 1] * sin_g
+    vy = -vel_teme[:, 0] * sin_g + vel_teme[:, 1] * cos_g
+    vz = vel_teme[:, 2]
+    vel_ecef = np.stack([vx, vy, vz], axis=-1)
+    
+    return pos_ecef, vel_ecef
+
 class Propagator:
     def __init__(self, db_path=None):
         if db_path is None:
@@ -158,10 +187,14 @@ class Propagator:
         frs = np.array(frs)
         
         # sgp4 array API: sat.sgp4_array(jd, fr) -> error, pos, vel
-        # pos/vel are (n, 3)
-        error, sat_pos, sat_vel = sat.sgp4_array(jds, frs)
+        # pos/vel are (n, 3) in TEME frame
+        error, sat_pos_teme, sat_vel_teme = sat.sgp4_array(jds, frs)
         if np.any(error != 0): 
             return None
+        
+        # Convert TEME to ECEF
+        gmst = get_gmst(jds, frs)
+        sat_pos, sat_vel = rotate_teme_to_ecef(sat_pos_teme, sat_vel_teme, gmst)
         
         # Ground station ECEF
         gs_pos = geodetic_to_ecef(gs_lat, gs_lon, gs_alt) # (3,)
@@ -179,6 +212,7 @@ class Propagator:
         az = np.arctan2(rho_enu[:, 0], rho_enu[:, 1])
         
         # Radial Velocity (Doppler)
+        # gs_vel is velocity of ground station in inertial frame at this instant
         gs_vel = np.array([-EARTH_OMEGA * gs_pos[1], EARTH_OMEGA * gs_pos[0], 0])
         rel_vel = sat_vel - gs_vel # (n, 3)
         v_radial = np.einsum('ni,ni->n', rel_vel, rho_ecef) / slant_range # (n,) km/s
@@ -190,6 +224,7 @@ class Propagator:
             azimuth_deg=np.degrees(az),
             sat_name=name
         )
+
 
     def get_constellation_geometry(self, constellation: Constellation, dts: list[datetime], gs_lat, gs_lon, gs_alt):
         """Pick the best satellite (highest elevation) at each time step."""
