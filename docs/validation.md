@@ -10,7 +10,10 @@ The simulator utilizes a multi-layered approach to ensure physical accuracy and 
 | | Rain Attenuation | ITU-R P.838/P.618 | Matches analytical reference curves |
 | | Geometry | Analytical GEO model | Consistent slant-range calculations |
 | | AR(1) Rain | ITU-R P.1853 | Expected autocorrelation decay |
+| **Real World** | SGP4 Accuracy | SatNOGS Network | **< 0.5° elevation error** |
+| | Rain Climatology | NASA GPM (IMERG) | Captures monsoon tail intensities |
 | **Automated** | Physics Invariants | Physical Laws | All invariants passed |
+| | SGP4 Regression | TLE Stability | < 25km GEO drift / 6h |
 | | Regression | Deterministic Seeds | Bit-identical reproducibility |
 | | Parallelism | Concurrent Engines | Serial and parallel outputs match |
 
@@ -138,6 +141,6 @@ The CCDF (Complementary Cumulative Distribution Function) plots verify that whil
 ---
 
 ## Validation Limitations
-- Validation focuses on model correctness rather than field measurements.
+- Current validation combines analytical verification with limited real-world comparison against NASA GPM precipitation data and SatNOGS orbital observations. Full validation against operational satellite telemetry and measured link outages has not yet been performed.
 - Atmospheric models are compared against ITU-R analytical references rather than live telemetry.
 - SGP4 accuracy is dependent on the freshness of TLE data provided in the catalog.
