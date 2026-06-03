@@ -120,13 +120,38 @@ We validate the SGP4 propagation layer and ECEF frame transformations against re
 
 | Reference Target | Source | Metric | Result |
 |:---|:---|:---|:---|
-| **CONNECTA IOT-1** | SatNOGS #14217654 | Peak Elevation Error | **0.49°** |
+| **CONNECTA IOT-1** | SatNOGS #14217654 | Peak Elevation Error | **0.81°** |
 | **INTELSAT 10 (GEO)** | TLE Stability | 6-hour ECEF Drift | **< 23 km** |
 
-![SatNOGS Validation](../real_world_validation/plots/val_sgp4_satnogs.png)
-*Figure 4: Predicted vs. observed elevation curve for LEO pass validation.*
+### 4.3 Availability & Handoff Validation
+Synthetic and stochastic scenarios are used to verify the link availability and switching logic accuracy.
 
-### 4.3 Regional CCDF Analysis
+#### Availability Verification
+| Scenario | Expected | Measured |
+|-----------|-----------|-----------|
+| No Outages | 100% | 100% |
+| Full Outage | 0% | 0% |
+| 10% Outage | 90% | 90% |
+
+#### Fade Duration Statistics (AR(1) Model)
+| Metric | Value |
+|----------|----------|
+| Mean Fade Duration | 2.1 min |
+| P95 Fade Duration | 5.1 min |
+
+#### Handoff Policy Comparison
+| Policy | Availability | Handoffs/hr |
+|----------|----------|----------|
+| Highest Elevation | 96.1% | 4.00 |
+| Highest SNR | 96.1% | 3.96 |
+
+#### GEO vs Constellation Comparison
+| System | Availability |
+|----------|----------|
+| GEO (Fixed) | 99.4% |
+| Constellation (LEO) | 95.2% |
+
+### 4.4 Regional CCDF Analysis
 The CCDF (Complementary Cumulative Distribution Function) plots verify that while the simulator captures the general log-normal distribution, GPM data reveals higher extreme-intensity tails in monsoon regions like Delhi.
 
 ![Global Summary](../real_world_validation/global_comparison_summary.png)
