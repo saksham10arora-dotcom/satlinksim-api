@@ -69,12 +69,12 @@ The simulator has evolved from a simple scalar model to a highly complex, statef
 | ------------- | ---------- | ----------- |
 | **Scalar** | ~6k/s | Legacy baseline (pre-vectorization) |
 | **Vectorized** | ~275k/s | Current NumPy-optimized core (single sat) |
-| **Constellation**| ~60k/s | Vectorized + Dynamic Multi-Sat Geometry |
-| **Handoff** | ~59k/s | Full pipeline + Stateful Switch Policies |
+| **Constellation**| ~74k/s | Vectorized + Dynamic Multi-Sat Geometry (1k+ satellites) |
+| **Handoff** | ~73k/s | Full pipeline + Stateful Switch Policies |
 
 ### Performance Analysis
 - **Vectorization Gain**: Transitioning from scalar loops to NumPy operations provided a **~45x performance boost**.
-- **Constellation Overhead**: Introducing dynamic multi-satellite propagation (SGP4) for every station significantly increases CPU load per timestep. However, the system still achieves **60,000 steps/sec**, which is equivalent to simulating a full year of 1-minute data for one station in less than 10 seconds.
+- **Constellation Overhead**: Introducing dynamic multi-satellite propagation (SGP4) for every station significantly increases CPU load per timestep. However, even with a database of **1,335 satellites**, the system still achieves **74,000 steps/sec**, which is equivalent to simulating a full year of 1-minute data for one station in less than 8 seconds.
 - **Handoff Stability**: The Handoff Manager (Hysteresis, Dwell Time) introduces negligible overhead (~1.6%) while providing realistic connection stability and preventing "ping-pong" switching between satellites.
 
 
