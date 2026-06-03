@@ -55,7 +55,7 @@ Profiling of the full constellation/handoff pipeline (14 GHz, 50k steps) reveals
 *Note: The Rain Process remains the primary sequential bottleneck due to the AR(1) state dependence, despite station-level vectorization.*
 
 ### 1.4 Memory Scaling
-The simulator is designed for a low memory footprint. A 500,000-step simulation (approx. 1 year of 1-minute data for one station) consumes only **122 MB** of RAM.
+The simulator is designed for a low memory footprint. A 500,000-step simulation (approx. 1 year of 1-minute data for one station) consumes **326 MB** of RAM.
 
 ![Memory Benchmark](../val_and_bench/bench_memory.png)
 *Figure 2: Memory usage delta vs. simulation step count.*
