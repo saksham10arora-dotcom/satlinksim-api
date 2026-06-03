@@ -11,7 +11,8 @@ Physics-first satellite link simulator integrating:
 - **XGBoost** link quality prediction
 
 ### Highlights
-- **74,000 timesteps/sec** throughput (Constellation-aware vectorized engine)
+- **275k timesteps/sec** (single-satellite vectorized mode)
+- **74k timesteps/sec** (full constellation + handoff mode)
 - **1,300+ Satellite Database**: Integrated live CelesTrak TLE updates (OneWeb, Iridium, GEO).
 - **Dynamic Handoffs**: State-aware switching based on highest elevation or SNR with hysteresis.
 - **Validation suite**: Extensive quantitative reports for physics and network integrity.
@@ -62,7 +63,7 @@ The simulation engine combines NumPy vectorization, async orbital propagation, a
 
 ### Validation & Benchmarks
 - **FSPL accuracy**: <1e-4 dB
-- **Throughput**: 74,000 timesteps/sec
+- **Throughput**: 275k/sec (Single-Sat) | 74k/sec (Constellation)
 - **SGP4 latency**: 75µs
 - **Memory**: 326MB @ 500k steps
 - **Monte Carlo Speedup**: ~2.5x (12 workers)
