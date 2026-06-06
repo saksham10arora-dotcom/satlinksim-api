@@ -26,6 +26,12 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+try:
+    from numba import njit
+except ImportError:
+    # Fallback to no-op decorator if numba is not available
+    def njit(func):
+        return func
 
 from ground_stations import GROUND_STATIONS
 from propogate import Propagator, Satellite, Constellation
@@ -141,6 +147,44 @@ def rain_attenuation_db(rain_rate_mmh, itu_k, itu_alpha, eff_path_km):
 
 TAU_COHERENCE_S = 300.0
 
+@njit
+def _simulate_rain_kernel(n_steps, n_stations, rho, mu, sigma, p_onset, p_clear, force_rain):
+    """
+    JIT-compiled kernel for Maseng-Bakken rain process.
+    """
+    rates = np.zeros((n_steps, n_stations))
+    ln_R = mu.copy()
+    raining = np.zeros(n_stations, dtype=np.bool_)
+    if force_rain:
+        raining[:] = True
+
+    for t in range(n_steps):
+        if not force_rain:
+            for i in range(n_stations):
+                if not raining[i]:
+                    if np.random.random() < p_onset[i]:
+                        raining[i] = True
+                        ln_R[i] = mu[i]
+                else:
+                    if np.random.random() < p_clear[i]:
+                        raining[i] = False
+        
+        noise = np.random.standard_normal(n_stations)
+        ln_R = (rho * ln_R
+                + np.sqrt(1 - rho**2) * sigma * noise
+                + (1 - rho) * mu)
+        
+        for i in range(n_stations):
+            if raining[i]:
+                rate = np.exp(ln_R[i])
+                if rate > 150.0:
+                    rate = 150.0
+                rates[t, i] = rate
+            else:
+                rates[t, i] = 0.0
+                
+    return rates
+
 class CorrelatedRainProcess:
     def __init__(self, gs, dt_s, tau_c=TAU_COHERENCE_S,
                  force_rain=False, rain_rate_scale=1.0):
@@ -173,25 +217,18 @@ class CorrelatedRainProcess:
             self._p_onset[i] = 1 - np.exp(-dt_s / mean_clear_dur_s)
             self._p_clear[i] = 1 - np.exp(-dt_s / mean_rain_dur_s)
 
-        self.ln_R = self.mu.copy()
-        self.raining = np.full(self.n_stations, force_rain)
+    def generate_batch(self, n_steps):
+        """
+        Generate rain rates for multiple steps in one JIT-accelerated call.
+        """
+        return _simulate_rain_kernel(
+            n_steps, self.n_stations, self.rho, self.mu, self.sigma, 
+            self._p_onset, self._p_clear, self.force_rain
+        )
 
     def step(self):
-        if not self.force_rain:
-            onset_mask = (~self.raining) & (np.random.rand(self.n_stations) < self._p_onset)
-            self.raining[onset_mask] = True
-            self.ln_R[onset_mask] = self.mu[onset_mask]
-            
-            clear_mask = self.raining & (np.random.rand(self.n_stations) < self._p_clear)
-            self.raining[clear_mask] = False
-            
-        noise = np.random.normal(0, 1, self.n_stations)
-        self.ln_R = (self.rho * self.ln_R
-                     + np.sqrt(1 - self.rho**2) * self.sigma * noise
-                     + (1 - self.rho) * self.mu)
-        
-        rates = np.where(self.raining, np.minimum(np.exp(self.ln_R), 150.0), 0.0)
-        return rates
+        # Kept for backward compatibility if needed, but we prefer batching
+        return self.generate_batch(1)[0]
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -424,7 +461,7 @@ def simulate_all_batched(ground_stations: list[dict],
             # Correlation Rain Process (shared per station)
             rain_proc = CorrelatedRainProcess([gs], dt_s=dt_s, force_rain=force_rain, 
                                               rain_rate_scale=rain_rate_scale)
-            rain_rate_s = np.array([rain_proc.step()[0] for _ in range(n_steps)])
+            rain_rate_s = rain_proc.generate_batch(n_steps)[:, 0]
 
             # Matrix for candidates [n_cands, n_steps]
             cand_snr_matrix = np.zeros((n_cands, n_steps))
