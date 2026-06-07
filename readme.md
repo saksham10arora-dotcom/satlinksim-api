@@ -41,14 +41,21 @@ graph TD
 ### Quick Start
 
 ```bash
-# Install dependencies
-pip install streamlit pandas numpy scikit-learn xgboost joblib matplotlib sgp4 requests numba
+# 1. Install the package in editable mode
+pip install -e .
 
-# Update satellite database with live TLEs
-python3 update_tle.py
+# 2. Update satellite database with live TLEs
+satlinksim-update
 
-# Run the dashboard
-streamlit run app.py
+# 3. Run the interactive Streamlit dashboard
+satlinksim-ui
+
+# 4. Run tests
+python3 -m pytest
+
+# 5. Run validation and benchmarks
+python3 val_and_bench/validation_correctness.py
+python3 val_and_bench/benchmarks.py
 ```
 
 ---
@@ -72,15 +79,20 @@ The simulation engine combines NumPy vectorization, Numba JIT compilation, async
 ---
 
 ### Repository Structure
+The project follows a standard `src`-layout for Python packages:
+
 ```text
-├── app.py                  # Dashboard & Parallel UI
-├── satellite_link_sim.py   # Vectorized Physics Engine
-├── propogate.py            # Async SGP4 Layer
-├── update_tle.py           # CelesTrak Live Update Tool
-├── ground_stations.py      # Station Database
-├── docs/                   # Detailed Documentation
-├── tests/                  # Physics & Regression Tests
-└── val_and_bench/          # Validation & Benchmarking Scripts
+├── docs/                   # Detailed physics and architecture docs
+├── src/
+│   └── satlinksim/         # Core Python package
+│       ├── app.py          # Streamlit Dashboard UI
+│       ├── satellite_link_sim.py  # Vectorized Physics Engine
+│       ├── propogate.py     # SGP4 & Constellation Management
+│       ├── update_tle.py    # Live TLE Update Tool
+│       └── ground_stations.py # Station Database
+├── tests/                  # Unit, physics, and regression tests
+├── real_world_validation/   # Comparison against external datasets
+└── val_and_bench/          # Performance and internal consistency tools
 ```
 
 ---
