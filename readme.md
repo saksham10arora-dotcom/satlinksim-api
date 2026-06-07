@@ -25,15 +25,26 @@ Physics-first satellite link simulator integrating:
 
 ```mermaid
 graph TD
-    I[CelesTrak] --> J[update_tle.py]
-    J --> A[TLE Catalog]
-    A --> B[SGP4 Propagation]
-    B --> C[Handoff Manager]
-    C --> D[Geometry Engine]
-    D --> E[ITU-R Models]
-    E --> F[Link Budget]
-    F --> G[ML Scoring]
-    G --> H[Dashboard]
+    A[TLE Catalog / satellites.db] --> B[SGP4 Propagation]
+
+    B --> C[Geometry Engine]
+    C --> D[ITU-R Models]
+    D --> E[Link Budget Engine]
+
+    E --> F[Candidate Link Matrix]
+
+    F --> G[Handoff Manager]
+
+    G --> H[Selected Link Timeline]
+
+    H --> I[Feature Extraction]
+    I --> J[XGBoost Scoring]
+    J --> K[Streamlit Dashboard]
+
+    subgraph JIT_ACCELERATED [Performance Layer]
+        R[Maseng-Bakken Rain Process]
+        R -- Numba JIT --> D
+    end
 ```
 
 ---
