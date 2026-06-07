@@ -1,3 +1,7 @@
+![Version](https://img.shields.io/badge/version-v1.0.0-blue)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 # Multi-Satellite Constillation Link Quality Simulator
 High-fidelity satellite communication simulator combining
 orbital propagation, atmospheric attenuation modeling, and
