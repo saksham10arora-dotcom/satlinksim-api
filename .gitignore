@@ -2,6 +2,12 @@
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+
+# Build and Packaging
+*.egg-info/
+build/
+dist/
 
 # Models
 *.pkl
@@ -13,3 +19,4 @@ __pycache__/
 # Environment
 .env
 venv/
+.venv/
