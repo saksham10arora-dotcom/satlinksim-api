@@ -1,0 +1,3 @@
+[console_scripts]
+satlinksim-ui = satlinksim.cli:main
+satlinksim-update = satlinksim.update_tle:main

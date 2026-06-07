@@ -14,7 +14,9 @@ from sklearn.metrics import mean_squared_error, r2_score
 # ==================================================
 # CONFIG
 # ==================================================
-CSV_FILE = "link_training_data.csv"
+CSV_FILE = os.path.join(os.path.dirname(__file__), "link_training_data.csv")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "xgb_link_model.pkl")
+SCALER_PATH = os.path.join(os.path.dirname(__file__), "feature_scaler.pkl")
 
 # ==================================================
 # CHECK FILE
@@ -141,7 +143,7 @@ for feature, importance in zip(FEATURES, model.feature_importances_):
 # ==================================================
 # SAVE
 # ==================================================
-joblib.dump(model, "xgb_link_model.pkl")
-joblib.dump(scaler, "feature_scaler.pkl")
+joblib.dump(model, MODEL_PATH)
+joblib.dump(scaler, SCALER_PATH)
 
 print("\nModel + scaler saved successfully.")

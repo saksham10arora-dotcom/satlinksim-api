@@ -1,14 +1,9 @@
 import pytest
-import sys
-import os
 import numpy as np
 from datetime import datetime, timezone
 
-# Allow standalone execution: add 'src' to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import simulate_station, SNR_THRESHOLD_DB
-from ground_stations import GROUND_STATIONS
+from satlinksim.satellite_link_sim import simulate_station, SNR_THRESHOLD_DB
+from satlinksim.ground_stations import GROUND_STATIONS
 
 def test_outage_softness():
     """Verify that outage_fraction is now a soft metric (mean packet loss)."""

@@ -1,14 +1,9 @@
 import pytest
 import random
-import sys
-import os
 from datetime import datetime, timezone
 
-# Allow standalone execution: add 'src' to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import simulate_station
-from ground_stations import GROUND_STATIONS
+from satlinksim.satellite_link_sim import simulate_station
+from satlinksim.ground_stations import GROUND_STATIONS
 
 def test_deterministic_seed():
     """Regression test: verify that the same seed produces identical SNR series."""

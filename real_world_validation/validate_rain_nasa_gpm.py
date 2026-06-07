@@ -6,10 +6,8 @@ import os
 import math
 import random
 
-# Add parent directory to path to import physicsengine and ground_stations
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import physicsengine
-from ground_stations import GROUND_STATIONS
+from satlinksim import physicsengine
+from satlinksim.ground_stations import GROUND_STATIONS
 
 # --- Configuration & NASA GPM Reference Data ---
 # Research-derived GPM estimates for each station.

@@ -7,12 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime, timezone
 
-# Add parent directory to path to import modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import simulate_station, simulate_all
-from ground_stations import GROUND_STATIONS
-from propogate import Propagator
+from satlinksim.satellite_link_sim import simulate_station, simulate_all
+from satlinksim.ground_stations import GROUND_STATIONS
+from satlinksim.propogate import Propagator
 
 def benchmark_throughput():
     print("--- Simulation Throughput Benchmark ---")

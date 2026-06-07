@@ -6,13 +6,10 @@ import random
 import sys
 import os
 
-# Add parent directory to path to import modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 # Import the modules under test
-import physicsengine
-import geometry
-import propogate
+from satlinksim import physicsengine
+from satlinksim import geometry
+from satlinksim import propogate
 
 def validate_fspl():
     print("--- FSPL Validation ---")

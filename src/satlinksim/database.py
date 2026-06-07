@@ -1,4 +1,5 @@
 import sqlite3
+import os
 
 tle_text = """
 INTELSAT 10 (IS-10)
@@ -235,7 +236,8 @@ GALAXY 37 (G-37)
 
 """
 
-conn = sqlite3.connect("satellites.db")
+db_path = os.path.join(os.path.dirname(__file__), "satellites.db")
+conn = sqlite3.connect(db_path)
 cur = conn.cursor()
 
 cur.execute("""

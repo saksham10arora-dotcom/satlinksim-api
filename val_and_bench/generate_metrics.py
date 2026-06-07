@@ -2,8 +2,8 @@
 import time
 import numpy as np
 from datetime import datetime, timezone, timedelta
-from propogate import Propagator, Satellite, Constellation, geodetic_to_ecef
-from satellite_link_sim import (
+from satlinksim.propogate import Propagator, Satellite, Constellation, geodetic_to_ecef
+from satlinksim.satellite_link_sim import (
     simulate_all_batched, run_monte_carlo, GROUND_STATIONS,
     fspl_db, itu_rain_coefficients, itu_rain_height,
     gaseous_absorption_db, effective_path_length,

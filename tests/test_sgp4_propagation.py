@@ -2,12 +2,8 @@
 import pytest
 import numpy as np
 from datetime import datetime, timezone, timedelta
-import sys
-import os
 
-# Add parent directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from propogate import Propagator, Satellite
+from satlinksim.propogate import Propagator, Satellite
 
 def test_sgp4_geo_ecef_stability():
     """Verify that a GEO satellite remains nearly stationary in ECEF."""

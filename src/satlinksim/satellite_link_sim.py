@@ -33,8 +33,8 @@ except ImportError:
     def njit(func):
         return func
 
-from ground_stations import GROUND_STATIONS
-from propogate import Propagator, Satellite, Constellation
+from satlinksim.ground_stations import GROUND_STATIONS
+from satlinksim.propogate import Propagator, Satellite, Constellation
 
 # ── Physical constants ────────────────────────────────────────────────────────
 C     = 2.998e8
@@ -148,16 +148,16 @@ def rain_attenuation_db(rain_rate_mmh, itu_k, itu_alpha, eff_path_km):
 TAU_COHERENCE_S = 300.0
 
 @njit
-def _simulate_rain_kernel(n_steps, n_stations, rho, mu, sigma, p_onset, p_clear, force_rain):
+def _seed_numba(seed):
+    np.random.seed(seed)
+
+@njit
+def _simulate_rain_kernel(n_steps, n_stations, rho, mu, sigma, p_onset, p_clear, force_rain, ln_R, raining):
     """
     JIT-compiled kernel for Maseng-Bakken rain process.
     """
     rates = np.zeros((n_steps, n_stations))
-    ln_R = mu.copy()
-    raining = np.zeros(n_stations, dtype=np.bool_)
-    if force_rain:
-        raining[:] = True
-
+    
     for t in range(n_steps):
         if not force_rain:
             for i in range(n_stations):
@@ -170,9 +170,9 @@ def _simulate_rain_kernel(n_steps, n_stations, rho, mu, sigma, p_onset, p_clear,
                         raining[i] = False
         
         noise = np.random.standard_normal(n_stations)
-        ln_R = (rho * ln_R
-                + np.sqrt(1 - rho**2) * sigma * noise
-                + (1 - rho) * mu)
+        ln_R[:] = (rho * ln_R
+                   + np.sqrt(1 - rho**2) * sigma * noise
+                   + (1 - rho) * mu)
         
         for i in range(n_stations):
             if raining[i]:
@@ -183,7 +183,7 @@ def _simulate_rain_kernel(n_steps, n_stations, rho, mu, sigma, p_onset, p_clear,
             else:
                 rates[t, i] = 0.0
                 
-    return rates
+    return rates, ln_R, raining
 
 class CorrelatedRainProcess:
     def __init__(self, gs, dt_s, tau_c=TAU_COHERENCE_S,
@@ -216,15 +216,24 @@ class CorrelatedRainProcess:
             mean_clear_dur_s = tau_c * (1 - P_rain) / (P_rain + 1e-9)
             self._p_onset[i] = 1 - np.exp(-dt_s / mean_clear_dur_s)
             self._p_clear[i] = 1 - np.exp(-dt_s / mean_rain_dur_s)
+        
+        self.ln_R = self.mu.copy()
+        self.raining = np.zeros(self.n_stations, dtype=np.bool_)
+        if self.force_rain:
+            self.raining[:] = True
 
     def generate_batch(self, n_steps):
         """
         Generate rain rates for multiple steps in one JIT-accelerated call.
         """
-        return _simulate_rain_kernel(
+        rates, new_ln_R, new_raining = _simulate_rain_kernel(
             n_steps, self.n_stations, self.rho, self.mu, self.sigma, 
-            self._p_onset, self._p_clear, self.force_rain
+            self._p_onset, self._p_clear, self.force_rain,
+            self.ln_R, self.raining
         )
+        self.ln_R = new_ln_R
+        self.raining = new_raining
+        return rates
 
     def step(self):
         # Kept for backward compatibility if needed, but we prefer batching
@@ -404,6 +413,7 @@ def simulate_all_batched(ground_stations: list[dict],
     if seed is not None:
         np.random.seed(seed)
         random.seed(seed)
+        _seed_numba(seed)
 
     n_stations = len(ground_stations)
     curr_time = start_time or datetime.now(timezone.utc)

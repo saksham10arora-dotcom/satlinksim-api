@@ -10,22 +10,25 @@ import joblib
 import asyncio
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from datetime import datetime, timezone
 
-from ground_stations import GROUND_STATIONS
-from satellite_link_sim import (
+from satlinksim.ground_stations import GROUND_STATIONS
+from satlinksim.satellite_link_sim import (
     simulate_station, StationResult, simulate_all_batched,
     simulate_all_concurrent, run_monte_carlo,
     DEFAULT_CARRIER_FREQ_HZ, DEFAULT_BANDWIDTH_HZ, DEFAULT_POLARIZATION,
     DEFAULT_N_STEPS, SNR_THRESHOLD_DB,
 )
-from propogate import Satellite, Constellation
+from satlinksim.propogate import Satellite, Constellation
 
 # ── ML assets ─────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model():
     try:
-        return joblib.load("xgb_link_model.pkl"), joblib.load("feature_scaler.pkl")
+        model_path = os.path.join(os.path.dirname(__file__), "xgb_link_model.pkl")
+        scaler_path = os.path.join(os.path.dirname(__file__), "feature_scaler.pkl")
+        return joblib.load(model_path), joblib.load(scaler_path)
     except:
         return None, None
 

@@ -7,10 +7,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timezone
 from concurrent.futures import ProcessPoolExecutor
 
-# Add parent directory to path to import modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import (
+from satlinksim.satellite_link_sim import (
     simulate_all_batched, simulate_all_concurrent, run_monte_carlo,
     GROUND_STATIONS, DEFAULT_N_STEPS
 )

@@ -5,9 +5,7 @@ import sys
 import os
 from datetime import datetime, timezone, timedelta
 
-# Add parent directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from propogate import Propagator, Satellite
+from satlinksim.propogate import Propagator, Satellite
 
 # --- Observation Data from SatNOGS ---
 # Observation ID: 14217654

@@ -5,10 +5,7 @@ import os
 import io
 from datetime import datetime, timezone
 
-# Add parent directory to path to import modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import simulate_all_batched, GROUND_STATIONS
+from satlinksim.satellite_link_sim import simulate_all_batched, GROUND_STATIONS
 
 def run_profile():
     # Large n_steps to get meaningful profiling data

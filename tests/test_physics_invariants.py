@@ -3,13 +3,8 @@ import math
 import random
 import statistics
 import numpy as np
-import sys
-import os
 
-# Allow standalone execution: add 'src' to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import (
+from satlinksim.satellite_link_sim import (
     fspl_db, 
     noise_power_dbw, 
     rain_attenuation_db, 
@@ -20,7 +15,7 @@ from satellite_link_sim import (
     effective_path_length,
     itu_rain_height
 )
-from ground_stations import GROUND_STATIONS
+from satlinksim.ground_stations import GROUND_STATIONS
 
 def test_fspl_monotonic_with_distance():
     """FSPL monotonic with distance: verify that path loss increases as distance increases."""

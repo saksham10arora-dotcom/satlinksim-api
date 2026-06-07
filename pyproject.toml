@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "satlinksim"
+version = "0.1.0"
+description = "High-fidelity satellite communication simulator"
+readme = "readme.md"
+authors = [{ name = "Satyansh", email = "satyanshgaur0@gmail.com" }]
+requires-python = ">=3.9"
+
+dependencies = [
+    "streamlit",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "xgboost",
+    "joblib",
+    "matplotlib",
+    "sgp4",
+    "requests",
+    "numba",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+satlinksim = ["*.pkl", "*.csv", "*.db"]
+
+[project.scripts]
+satlinksim-ui = "satlinksim.cli:main"
+satlinksim-update = "satlinksim.update_tle:main"

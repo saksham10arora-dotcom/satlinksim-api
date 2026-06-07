@@ -2,10 +2,10 @@ import pytest
 import asyncio
 import numpy as np
 from datetime import datetime, timezone
-from satellite_link_sim import (
+from satlinksim.satellite_link_sim import (
     simulate_all_batched, simulate_all_concurrent, run_monte_carlo
 )
-from ground_stations import GROUND_STATIONS
+from satlinksim.ground_stations import GROUND_STATIONS
 
 def test_simulate_all_batched():
     results = simulate_all_batched(GROUND_STATIONS, n_steps=10)

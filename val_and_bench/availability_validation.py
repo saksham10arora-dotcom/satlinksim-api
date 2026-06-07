@@ -4,15 +4,12 @@ import sys
 import os
 from datetime import datetime, timedelta, timezone
 
-# Add parent directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from satellite_link_sim import (
+from satlinksim.satellite_link_sim import (
     simulate_all_batched, StationResult, HandoffEvent, 
     SNR_THRESHOLD_DB, packet_loss_from_snr
 )
-from ground_stations import GROUND_STATIONS
-from propogate import Constellation, Satellite
+from satlinksim.ground_stations import GROUND_STATIONS
+from satlinksim.propogate import Constellation, Satellite
 
 def run_metric_verification():
     """Verify availability calculations with synthetic scenarios."""
