@@ -71,6 +71,27 @@ python3 -m pytest
 # 5. Run validation and benchmarks
 python3 val_and_bench/validation_correctness.py
 python3 val_and_bench/benchmarks.py
+
+---
+
+### Docker Usage
+
+You can also run the simulator using Docker:
+
+**Using Docker Build:**
+```bash
+# Build the image
+docker build -t satlinksim .
+
+# Run the container
+docker run -p 8501:8501 satlinksim
+```
+
+**Using Docker Compose:**
+```bash
+docker-compose up
+```
+The dashboard will be available at `http://localhost:8501`.
 ```
 
 ---
