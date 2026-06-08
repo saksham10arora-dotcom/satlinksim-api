@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  satlinksim:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      # Optional: persist the satellite database across container restarts
+      - satlink_data:/app/src/satlinksim
+    restart: unless-stopped
+
+volumes:
+  satlink_data:
