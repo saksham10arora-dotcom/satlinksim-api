@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from sgp4.api import Satrec, jday
 from typing import List, Optional, Union
+from satlinksim.database import init_db
 
 # ── WGS84 Constants ──────────────────────────────────────────────────────────
 WGS84_A = 6378.137             # Semi-major axis (km)
@@ -138,6 +139,11 @@ class Propagator:
             # Default to satellites.db in the same directory as this file
             db_path = os.path.join(os.path.dirname(__file__), "satellites.db")
         self.db_path = db_path
+        
+        # Ensure database is initialized
+        if self.db_path != ":memory:":
+            init_db(self.db_path)
+            
         self.cache = {}
         self._executor = ThreadPoolExecutor(max_workers=os.cpu_count())
 

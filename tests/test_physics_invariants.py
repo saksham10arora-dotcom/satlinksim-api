@@ -91,7 +91,11 @@ def test_ar1_correlation_preserved():
         # We need the internal ln_R state or we can take log of the output
         rate = proc.step()
         if rate > 0:
-            samples.append(math.log(rate))
+            if isinstance(rate, (np.ndarray, list)):
+                rate_val = float(rate[0])
+            else:
+                rate_val = float(rate)
+            samples.append(math.log(rate_val))
     
     # Calculate empirical autocorrelation at lag 1
     samples = np.array(samples)
