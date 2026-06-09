@@ -1,0 +1,14 @@
+simulation:
+  handoff:
+    hysteresis_db: 3.0
+    dwell_steps: 5
+  link:
+    carrier_freq_hz: 14000000000.0
+    bandwidth_hz: 36000000.0
+    polarization: "vertical"
+    snr_threshold_db: 10.0
+  n_steps: 60
+  dt_s: 60
+
+rain:
+  tau_c: 300.0
