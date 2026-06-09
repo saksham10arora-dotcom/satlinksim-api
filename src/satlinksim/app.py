@@ -14,6 +14,7 @@ import os
 from datetime import datetime, timezone
 
 from satlinksim.ground_stations import GROUND_STATIONS
+from satlinksim.config import config
 from satlinksim.satellite_link_sim import (
     simulate_station, StationResult, simulate_all_batched,
     simulate_all_concurrent, run_monte_carlo,
@@ -104,8 +105,8 @@ with st.sidebar:
     
     selected_constellation = None
     handoff_policy = "highest_elevation"
-    hysteresis = 2.0
-    min_dwell = 2
+    hysteresis = config.simulation.handoff.hysteresis_db
+    min_dwell = config.simulation.handoff.dwell_steps
 
     if use_constellation:
         const_choice = st.selectbox(
@@ -126,8 +127,8 @@ with st.sidebar:
                 st.error("Invalid IDs")
 
         handoff_policy = st.selectbox("Switching Policy", ["highest_elevation", "highest_snr"])
-        hysteresis = st.slider("Hysteresis (dB/deg)", 0.0, 10.0, 2.0, 0.5)
-        min_dwell = st.slider("Min Dwell (steps)", 1, 10, 2)
+        hysteresis = st.slider("Hysteresis (dB/deg)", 0.0, 10.0, float(config.simulation.handoff.hysteresis_db), 0.5)
+        min_dwell = st.slider("Min Dwell (steps)", 1, 10, int(config.simulation.handoff.dwell_steps))
 
     st.divider()
     st.header("Simulation & Parallelism")
@@ -138,7 +139,7 @@ with st.sidebar:
     )
 
     n_steps = st.slider(
-        "Window (minutes)", min_value=10, max_value=180, value=60, step=10,
+        "Window (minutes)", min_value=10, max_value=180, value=int(config.simulation.n_steps), step=10,
     )
 
     mc_iterations = 1

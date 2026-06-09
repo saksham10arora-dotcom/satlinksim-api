@@ -35,6 +35,7 @@ except ImportError:
 
 from satlinksim.ground_stations import GROUND_STATIONS
 from satlinksim.propogate import Propagator, Satellite, Constellation
+from satlinksim.config import config
 
 # ── Physical constants ────────────────────────────────────────────────────────
 C     = 2.998e8
@@ -43,14 +44,14 @@ R_E   = 6371.0
 R_GEO = 42_164.0
 
 # ── System defaults (overrideable per simulate_station call) ─────────────────
-DEFAULT_CARRIER_FREQ_HZ = 14e9
-DEFAULT_BANDWIDTH_HZ    = 36e6
-DEFAULT_POLARIZATION    = "vertical"
-DEFAULT_DT_S            = 60
-DEFAULT_N_STEPS         = 60
+DEFAULT_CARRIER_FREQ_HZ = config.simulation.link.carrier_freq_hz
+DEFAULT_BANDWIDTH_HZ    = config.simulation.link.bandwidth_hz
+DEFAULT_POLARIZATION    = config.simulation.link.polarization
+DEFAULT_DT_S            = config.simulation.dt_s
+DEFAULT_N_STEPS         = config.simulation.n_steps
 
 # ── Packet-loss sigmoid threshold (Ku-band DVB-S2 practical floor) ───────────
-SNR_THRESHOLD_DB = 10.0
+SNR_THRESHOLD_DB = config.simulation.link.snr_threshold_db
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -145,7 +146,7 @@ def rain_attenuation_db(rain_rate_mmh, itu_k, itu_alpha, eff_path_km):
 # ║  E.  ITU-R P.1853 — Maseng-Bakken AR(1) correlated rain                ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-TAU_COHERENCE_S = 300.0
+TAU_COHERENCE_S = config.rain.tau_c
 
 @njit
 def _seed_numba(seed):
@@ -306,7 +307,9 @@ class HandoffManager:
     Manages satellite selection and switching logic (handoffs).
     Prevents 'ping-ponging' using hysteresis and minimum dwell time.
     """
-    def __init__(self, policy="highest_elevation", hysteresis=2.0, min_dwell_steps=2):
+    def __init__(self, policy="highest_elevation", 
+                 hysteresis=config.simulation.handoff.hysteresis_db, 
+                 min_dwell_steps=config.simulation.handoff.dwell_steps):
         self.policy = policy  # "highest_elevation" or "highest_snr"
         self.hysteresis = hysteresis  # degrees if elevation, dB if SNR
         self.min_dwell_steps = min_dwell_steps
@@ -407,8 +410,8 @@ def simulate_all_batched(ground_stations: list[dict],
                          rain_rate_scale: float = 1.0,
                          constellation:   Constellation | None = None,
                          handoff_policy:  str = "highest_elevation",
-                         hysteresis:      float = 2.0,
-                         min_dwell_steps: int = 2,
+                         hysteresis:      float = config.simulation.handoff.hysteresis_db,
+                         min_dwell_steps: int = config.simulation.handoff.dwell_steps,
                          ) -> list[StationResult]:
     if seed is not None:
         np.random.seed(seed)

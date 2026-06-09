@@ -14,6 +14,7 @@ Upgrades over baseline:
 import math
 import random
 import statistics
+from satlinksim.config import config
 
 # ── Physical constants ──────────────────────────────────────────────────────
 C = 2.998e8          # speed of light, m/s
@@ -193,7 +194,7 @@ def rain_attenuation_db(rain_rate_mmh: float) -> float:
 # Model: ln(R[t]) = rho * ln(R[t-1]) + sqrt(1-rho²) * sigma_ln * N(0,1) + mu_ln
 # Coherence time tau_c ≈ 5 minutes (300 s) from empirical rain cell studies.
 
-TAU_COHERENCE_S = 300.0   # rain coherence time (s) — typical for Ku-band studies
+TAU_COHERENCE_S = config.rain.tau_c   # rain coherence time (s) — typical for Ku-band studies
 
 def _ar1_rho(dt_s: float, tau_c: float) -> float:
     """AR(1) autocorrelation coefficient for time step dt_s."""
