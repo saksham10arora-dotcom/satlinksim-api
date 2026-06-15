@@ -35,8 +35,8 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-satlinksim = ["*.pkl", "*.csv", "*.db"]
+"*" = ["*.pkl", "*.csv", "*.db", "**/*.pkl", "**/*.csv", "**/*.db"]
 
 [project.scripts]
 satlinksim-ui = "satlinksim.cli:main"
-satlinksim-update = "satlinksim.update_tle:main"
+satlinksim-update = "satlinksim.infrastructure.tle.updater:main"
