@@ -117,16 +117,15 @@ The simulation engine combines NumPy vectorization, Numba JIT compilation, async
 ---
 
 ### Repository Structure
-The project follows a standard `src`-layout for Python packages:
+The project follows a Clean Architecture layout to strictly separate domain physics from external integrations:
 
 ```text
 ├── docs/                   # Detailed physics and architecture docs
 ├── src/
 │   └── satlinksim/         # Core Python package
-│       ├── app.py          # Streamlit Dashboard UI
-│       ├── satellite_link_sim.py  # Vectorized Physics Engine
-│       ├── propogate.py     # SGP4 & Constellation Management
-│       ├── update_tle.py    # Live TLE Update Tool
+│       ├── application/    # Orchestration and Simulation Engine
+│       ├── domain/         # Physics, ITU models, Link Budget, and Geometry
+│       ├── infrastructure/ # External services (Streamlit UI, TLE, DB, ML)
 │       └── ground_stations.py # Station Database
 ├── tests/                  # Unit, physics, and regression tests
 ├── real_world_validation/   # Comparison against external datasets
