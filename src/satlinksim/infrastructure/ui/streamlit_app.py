@@ -15,20 +15,20 @@ from datetime import datetime, timezone
 
 from satlinksim.ground_stations import GROUND_STATIONS
 from satlinksim.config import config
-from satlinksim.satellite_link_sim import (
-    simulate_station, StationResult, simulate_all_batched,
-    simulate_all_concurrent, run_monte_carlo,
+from satlinksim.domain.models import StationResult, Satellite, Constellation
+from satlinksim.application.simulation_engine import (
+    SimulationEngine,
     DEFAULT_CARRIER_FREQ_HZ, DEFAULT_BANDWIDTH_HZ, DEFAULT_POLARIZATION,
     DEFAULT_N_STEPS, SNR_THRESHOLD_DB,
 )
-from satlinksim.propogate import Satellite, Constellation
 
 # ── ML assets ─────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model():
     try:
-        model_path = os.path.join(os.path.dirname(__file__), "xgb_link_model.pkl")
-        scaler_path = os.path.join(os.path.dirname(__file__), "feature_scaler.pkl")
+        ml_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml")
+        model_path = os.path.join(ml_dir, "xgb_link_model.pkl")
+        scaler_path = os.path.join(ml_dir, "feature_scaler.pkl")
         return joblib.load(model_path), joblib.load(scaler_path)
     except:
         return None, None
@@ -115,11 +115,12 @@ with st.sidebar:
         )
         
         if const_choice == "Starlink (Mock 3-Sat)":
-            selected_constellation = Constellation.from_norad_ids("Starlink-Mock", [26766, 26900, 27380])
+            # Using actual LEO satellites from DB so they move and trigger handoffs
+            selected_constellation = Constellation.from_norad_ids("Starlink-Mock", [44057, 44059, 44061])
         elif const_choice == "OneWeb (Mock 2-Sat)":
             selected_constellation = Constellation.from_norad_ids("OneWeb-Mock", [45131, 45132])
         else:
-            ids_str = st.text_input("NORAD IDs (comma separated)", "26766, 26900")
+            ids_str = st.text_input("NORAD IDs (comma separated)", "44057, 45131")
             try:
                 ids = [int(i.strip()) for i in ids_str.split(",")]
                 selected_constellation = Constellation.from_norad_ids("Custom", ids)
@@ -138,9 +139,11 @@ with st.sidebar:
         ["Standard (Batched NumPy)", "Concurrent (Async Propagation)", "Monte Carlo (Multiprocessing)"],
     )
 
-    n_steps = st.slider(
-        "Window (minutes)", min_value=10, max_value=180, value=int(config.simulation.n_steps), step=10,
+    window_minutes = st.slider(
+        "Window (minutes)", min_value=1, max_value=180, value=10, step=1,
     )
+    # Convert minutes to number of steps (1 step = 1 second)
+    n_steps = window_minutes * 60
 
     mc_iterations = 1
     if sim_mode == "Monte Carlo (Multiprocessing)":
@@ -155,7 +158,6 @@ with st.sidebar:
 # ║  Run simulation                                                         ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-@st.cache_data(show_spinner="Running physics simulation…")
 def run_simulation(sim_mode, mc_iterations, n_steps, force_rain, freq_hz, 
                    polarization, bandwidth_hz, eirp_offset_db, rain_rate_scale,
                    constellation=None, handoff_policy="highest_elevation",
@@ -175,14 +177,13 @@ def run_simulation(sim_mode, mc_iterations, n_steps, force_rain, freq_hz,
         min_dwell_steps = min_dwell_steps
     )
     
+    engine = SimulationEngine()
     if sim_mode == "Monte Carlo (Multiprocessing)":
-        return run_monte_carlo(mc_iterations, GROUND_STATIONS, **kwargs)
+        return engine.run_monte_carlo(mc_iterations, GROUND_STATIONS, **kwargs)
     elif sim_mode == "Concurrent (Async Propagation)":
-        # asyncio.run can be tricky in some Streamlit environments, 
-        # but we'll stick to it as per original logic.
-        return [asyncio.run(simulate_all_concurrent(GROUND_STATIONS, **kwargs))]
+        return [asyncio.run(engine.simulate_all_concurrent(GROUND_STATIONS, **kwargs))]
     else:
-        return [simulate_all_batched(GROUND_STATIONS, **kwargs)]
+        return [engine.simulate_all_batched(GROUND_STATIONS, **kwargs)]
 
 all_iterations_results = run_simulation(
     sim_mode        = sim_mode,

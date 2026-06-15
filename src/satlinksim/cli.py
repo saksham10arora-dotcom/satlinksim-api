@@ -3,8 +3,8 @@ import os
 from streamlit.web import cli as stcli
 
 def main():
-    # Find the path to app.py relative to this file
-    app_path = os.path.join(os.path.dirname(__file__), "app.py")
+    # Find the path to streamlit_app.py relative to this file
+    app_path = os.path.join(os.path.dirname(__file__), "infrastructure", "ui", "streamlit_app.py")
     sys.argv = ["streamlit", "run", app_path] + sys.argv[1:]
     sys.exit(stcli.main())
 

@@ -4,6 +4,7 @@ readme.md
 src/satlinksim/__init__.py
 src/satlinksim/app.py
 src/satlinksim/cli.py
+src/satlinksim/config.py
 src/satlinksim/database.py
 src/satlinksim/feature_scaler.pkl
 src/satlinksim/geometry.py

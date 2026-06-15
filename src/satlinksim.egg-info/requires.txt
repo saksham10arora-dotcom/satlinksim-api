@@ -8,6 +8,8 @@ matplotlib
 sgp4
 requests
 numba
+pydantic
+pyyaml
 
 [dev]
 pytest

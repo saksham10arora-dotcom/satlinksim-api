@@ -13,7 +13,7 @@ CELESTRAK_GROUPS = {
     "globalstar": "https://celestrak.org/NORAD/elements/gp.php?GROUP=globalstar&FORMAT=tle"
 }
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "satellites.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "satellites.db")
 
 def update_database(groups=None):
     """Fetch TLEs from CelesTrak and update the local database."""
