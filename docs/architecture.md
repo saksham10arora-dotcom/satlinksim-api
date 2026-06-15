@@ -28,11 +28,13 @@ graph TD
     end
 ```
 
-## Core Modules
-- **`app.py`**: Streamlit dashboard providing UI controls, scoring, and visualization.
-- **`satellite_link_sim.py`**: High-performance ITU-R physics engine.
-- **`propogate.py`**: SGP4 Propagation Layer with async support.
-- **`ground_stations.py`**: Single source of truth for station parameters.
+## Core Modules (Clean Architecture)
+The codebase follows a Clean Architecture layout to strictly separate domain physics from application orchestration and external infrastructure:
+- **`src/satlinksim/domain/`**: Contains pure physical models, link budget math, geometric transformations, and core data structures (`models.py`). This layer has no external dependencies.
+- **`src/satlinksim/application/`**: Contains the `SimulationEngine`, orchestrating domain logic to fulfill batched, concurrent, and Monte Carlo simulation requests.
+- **`src/satlinksim/infrastructure/`**: Handles external integrations, including the Streamlit dashboard (`ui/`), SGP4 TLE propagation (`tle/`), database persistence (`persistence/`), and ML model training/inference (`ml/`).
+- **`src/satlinksim/ground_stations.py`**: Single source of truth for station parameters.
+*(Note: Compatibility wrappers exist in the root module to support legacy scripts).*
 
 ## High-Performance Engineering
 The simulator utilizes a multi-tier optimization strategy to handle large-scale satellite constellations:
