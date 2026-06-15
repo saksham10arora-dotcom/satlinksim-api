@@ -1,6 +1,7 @@
 import numpy as np
 
 from satlinksim.config import config
+from satlinksim.domain.interfaces import RainModel
 
 TAU_COHERENCE_S = config.rain.tau_c
 
@@ -37,7 +38,7 @@ def _simulate_rain_kernel(n_steps, n_stations, rho, mu, sigma, p_onset, p_clear,
                 
     return rates, curr_ln_R, curr_raining
 
-class CorrelatedRainProcess:
+class CorrelatedRainProcess(RainModel):
     def __init__(self, gs, dt_s, tau_c=TAU_COHERENCE_S,
                  force_rain=False, rain_rate_scale=1.0):
         if isinstance(gs, dict):

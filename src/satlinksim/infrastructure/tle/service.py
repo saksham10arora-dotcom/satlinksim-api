@@ -8,6 +8,7 @@ from sgp4.api import Satrec, jday
 from typing import List, Optional, Union
 
 from satlinksim.domain.models import Satellite, SatelliteGeometry, Constellation
+from satlinksim.domain.interfaces import Propagator
 from satlinksim.infrastructure.persistence.database import init_db
 
 # ── WGS84 Constants ──────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ def rotate_teme_to_ecef(pos_teme, vel_teme, gmst):
     
     return pos_ecef, vel_ecef
 
-class Propagator:
+class SGP4Propagator(Propagator):
     def __init__(self, db_path=None):
         if db_path is None:
             db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "satellites.db")

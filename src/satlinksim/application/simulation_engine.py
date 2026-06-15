@@ -3,9 +3,10 @@ import numpy as np
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union, Callable
 
 from satlinksim.domain.models import StationResult, Constellation
+from satlinksim.domain.interfaces import Propagator, RainModel
 from satlinksim.domain.rain.engine import CorrelatedRainProcess
 from satlinksim.domain.geometry.physics import geo_elevation_deg, geo_slant_range_km
 from satlinksim.domain.link.itu_models import (
@@ -15,8 +16,8 @@ from satlinksim.domain.link.itu_models import (
 from satlinksim.domain.link.budget import (
     fspl_db, noise_power_dbw, doppler_shift_hz, packet_loss_from_snr
 )
-from satlinksim.domain.handoff.manager import HandoffManager
-from satlinksim.infrastructure.tle.service import Propagator
+from satlinksim.domain.handoff.manager import HandoffManager, HandoffPolicy, HighestElevationPolicy, HighestSNRPolicy
+from satlinksim.infrastructure.tle.service import SGP4Propagator
 from satlinksim.config import config
 from satlinksim.ground_stations import GROUND_STATIONS
 
@@ -30,7 +31,7 @@ SNR_THRESHOLD_DB        = config.simulation.link.snr_threshold_db
 
 class SimulationEngine:
     def __init__(self, propagator: Optional[Propagator] = None):
-        self.propagator = propagator or Propagator()
+        self.propagator = propagator or SGP4Propagator()
 
     def simulate_all_batched(self, ground_stations: list[dict],
                              n_steps:         int   = DEFAULT_N_STEPS,
@@ -44,9 +45,10 @@ class SimulationEngine:
                              polarization:    str   = DEFAULT_POLARIZATION,
                              rain_rate_scale: float = 1.0,
                              constellation:   Optional[Constellation] = None,
-                             handoff_policy:  str = "highest_elevation",
+                             handoff_policy:  Union[str, HandoffPolicy] = "highest_elevation",
                              hysteresis:      float = config.simulation.handoff.hysteresis_db,
                              min_dwell_steps: int = config.simulation.handoff.dwell_steps,
+                             rain_model_factory: Optional[Callable[[dict], RainModel]] = None,
                              ) -> list[StationResult]:
         if seed is not None:
             np.random.seed(seed)
@@ -94,8 +96,11 @@ class SimulationEngine:
                 n_cands = len(candidates_geo)
                 cand_names = [g.sat_name for g in candidates_geo]
 
-                rain_proc = CorrelatedRainProcess([gs], dt_s=dt_s, force_rain=force_rain, 
-                                                  rain_rate_scale=rain_rate_scale)
+                if rain_model_factory:
+                    rain_proc = rain_model_factory(gs)
+                else:
+                    rain_proc = CorrelatedRainProcess([gs], dt_s=dt_s, force_rain=force_rain, 
+                                                      rain_rate_scale=rain_rate_scale)
                 rain_rate_s = rain_proc.generate_batch(n_steps)[:, 0]
 
                 cand_snr_matrix = np.zeros((n_cands, n_steps))
@@ -121,11 +126,18 @@ class SimulationEngine:
                     cand_rain_db_matrix[c_idx] = ra
                     cand_scint_db_matrix[c_idx] = scint_db
 
-                hm = HandoffManager(policy=handoff_policy, hysteresis=hysteresis, min_dwell_steps=min_dwell_steps)
+                if isinstance(handoff_policy, str):
+                    if handoff_policy == "highest_snr":
+                        policy_obj = HighestSNRPolicy()
+                    else:
+                        policy_obj = HighestElevationPolicy()
+                else:
+                    policy_obj = handoff_policy
+                
+                hm = HandoffManager(policy=policy_obj, hysteresis=hysteresis, min_dwell_steps=min_dwell_steps)
                 selected_indices = []
                 for t in range(n_steps):
-                    metrics = cand_snr_matrix[:, t] if handoff_policy == "highest_snr" else cand_el_matrix[:, t]
-                    idx = hm.select(t, cand_names, metrics)
+                    idx = hm.select(t, cand_names, cand_snr_matrix[:, t], cand_el_matrix[:, t])
                     selected_indices.append(idx)
                 
                 t_idx = np.arange(n_steps)
