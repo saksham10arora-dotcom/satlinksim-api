@@ -21,6 +21,8 @@ from satlinksim.application.simulation_engine import (
     DEFAULT_CARRIER_FREQ_HZ, DEFAULT_BANDWIDTH_HZ, DEFAULT_POLARIZATION,
     DEFAULT_N_STEPS, SNR_THRESHOLD_DB,
 )
+from satlinksim.infrastructure.api.client import SatLinkSimClient
+from satlinksim.infrastructure.api.schemas import SimulationRequest, GroundStation, ItuRain, ConstellationSchema, SatelliteSchema
 
 # ── ML assets ─────────────────────────────────────────────────────────────────
 @st.cache_resource
@@ -136,8 +138,12 @@ with st.sidebar:
 
     sim_mode = st.selectbox(
         "Execution Mode",
-        ["Standard (Batched NumPy)", "Concurrent (Async Propagation)", "Monte Carlo (Multiprocessing)"],
+        ["Standard (Batched NumPy)", "Concurrent (Async Propagation)", "Monte Carlo (Multiprocessing)", "REST API (Remote)"],
     )
+
+    api_url = "http://localhost:8000"
+    if sim_mode == "REST API (Remote)":
+        api_url = st.text_input("API URL", value="http://localhost:8000")
 
     window_minutes = st.slider(
         "Window (minutes)", min_value=1, max_value=180, value=10, step=1,
@@ -161,10 +167,67 @@ with st.sidebar:
 def run_simulation(sim_mode, mc_iterations, n_steps, force_rain, freq_hz, 
                    polarization, bandwidth_hz, eirp_offset_db, rain_rate_scale,
                    constellation=None, handoff_policy="highest_elevation",
-                   hysteresis=2.0, min_dwell_steps=2):
+                   hysteresis=2.0, min_dwell_steps=2, api_url="http://localhost:8000"):
     
+    if sim_mode == "REST API (Remote)":
+        client = SatLinkSimClient(base_url=api_url)
+        
+        # Prepare request
+        gs_models = []
+        for gs in GROUND_STATIONS:
+            itu = ItuRain(**gs["itu_rain"])
+            gs_models.append(GroundStation(
+                name=gs["name"],
+                eirp_dbw=gs["eirp_dbw"],
+                g_rx_dbi=gs["g_rx_dbi"],
+                system_temp_k=gs["system_temp_k"],
+                antenna_diam_m=gs["antenna_diam_m"],
+                latitude=gs["latitude"],
+                longitude=gs["longitude"],
+                altitude_km=gs["altitude_km"],
+                itu_rain=itu,
+                wv_g_m3=gs["wv_g_m3"],
+                humidity_pct=gs["humidity_pct"],
+                v_radial_ms=gs["v_radial_ms"],
+                norad_id=gs.get("norad_id"),
+                sat_name=gs.get("sat_name"),
+                sat_lon_deg=gs.get("sat_lon_deg")
+            ))
+
+        const_schema = None
+        if constellation:
+            sats = [
+                SatelliteSchema(norad_id=s.norad_id, name=s.name, tle_line1=s.tle_line1, tle_line2=s.tle_line2)
+                for s in constellation.satellites
+            ]
+            const_schema = ConstellationSchema(name=constellation.name, satellites=sats)
+
+        request = SimulationRequest(
+            ground_stations=gs_models,
+            n_steps=n_steps,
+            dt_s=1.0,
+            force_rain=force_rain,
+            freq_hz=freq_hz,
+            eirp_offset_db=eirp_offset_db,
+            bandwidth_hz=bandwidth_hz,
+            polarization=polarization,
+            rain_rate_scale=rain_rate_scale,
+            constellation=const_schema,
+            handoff_policy=handoff_policy,
+            hysteresis=hysteresis,
+            min_dwell_steps=min_dwell_steps
+        )
+        
+        try:
+            response = client.simulate(request)
+            return [response.results]
+        except Exception as e:
+            st.error(f"API Error: {e}")
+            return [[]]
+
     kwargs = dict(
         n_steps         = n_steps,
+        dt_s            = 1.0,
         force_rain      = force_rain,
         freq_hz         = freq_hz,
         eirp_offset_db  = eirp_offset_db,
@@ -199,6 +262,7 @@ all_iterations_results = run_simulation(
     handoff_policy  = handoff_policy,
     hysteresis      = hysteresis,
     min_dwell_steps = min_dwell,
+    api_url         = api_url
 )
 
 sim_results = all_iterations_results[0]
