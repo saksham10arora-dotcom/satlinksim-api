@@ -1,6 +1,7 @@
 import uuid
 import asyncio
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.middleware.cors import CORSMiddleware
 from satlinksim.application.simulation_engine import SimulationEngine
 from satlinksim.infrastructure.api.schemas import (
     SimulationRequest, SimulationResponse, StationResultSchema, HandoffEventSchema,
@@ -23,6 +24,12 @@ configure_logging()
 logger = get_logger("satlinksim.api")
 
 app = FastAPI(title="SatLinkSim API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 engine = SimulationEngine()
 
 # Expose /metrics endpoint
@@ -317,7 +324,9 @@ async def health():
     return {"status": "ok"}
 
 def main():
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     main()
