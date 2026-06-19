@@ -13,6 +13,7 @@ from satlinksim.infrastructure.metrics import (
     metrics_app, SIMULATIONS_RUN, SIMULATION_LATENCY
 )
 from typing import List, Dict, Optional
+from pydantic import BaseModel
 import time
 import uvicorn
 import structlog
@@ -250,6 +251,66 @@ async def simulate(request: SimulationRequest):
     except Exception as e:
         logger.error("simulation_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+class FullSimRequest(BaseModel):
+    constellation: str = "Starlink"
+    n_steps: int = 3600
+    dt_s: float = 1.0
+    handoff_policy: str = "highest_elevation"
+    hysteresis: float = 0.5
+    min_dwell_steps: int = 10
+
+@app.post("/simulate/full")
+async def simulate_full(request: FullSimRequest):
+    """Run full simulation for all ground stations with a named constellation."""
+    start_time = time.time()
+    ids = NAMED_CONSTELLATIONS.get(request.constellation)
+    if not ids:
+        raise HTTPException(status_code=404, detail=f"Constellation '{request.constellation}' not found. Use: {list(NAMED_CONSTELLATIONS.keys())}")
+    constellation = Constellation.from_norad_ids(request.constellation, ids)
+    try:
+        results = engine.simulate_all_batched(
+            ground_stations=GROUND_STATIONS,
+            n_steps=request.n_steps,
+            dt_s=request.dt_s,
+            constellation=constellation,
+            handoff_policy=request.handoff_policy,
+            hysteresis=request.hysteresis,
+            min_dwell_steps=request.min_dwell_steps,
+        )
+        response_results = []
+        for res in results:
+            handoffs = [
+                HandoffEventSchema(time_step=h.time_step, old_sat=h.old_sat, new_sat=h.new_sat,
+                                   reason=h.reason, metric_delta=h.metric_delta)
+                for h in res.handoff_events
+            ]
+            response_results.append(StationResultSchema(
+                name=res.name, elevation=res.elevation, slant_km=res.slant_km, doppler_hz=res.doppler_hz,
+                path_loss=res.path_loss, gas_loss=res.gas_loss, rain_height=res.rain_height,
+                eff_path=res.eff_path, itu_k=res.itu_k, itu_alpha=res.itu_alpha,
+                scint_sig=res.scint_sig, noise_floor=res.noise_floor, snr_series=res.snr_series,
+                rain_series=res.rain_series, rain_db_series=res.rain_db_series, scint_series=res.scint_series,
+                pkt_loss_series=res.pkt_loss_series, elevation_series=res.elevation_series,
+                slant_range_series=res.slant_range_series, doppler_series=res.doppler_series,
+                snr_mean=res.snr_mean, snr_min=res.snr_min, snr_std=res.snr_std, snr_p10=res.snr_p10,
+                rain_fraction=res.rain_fraction, avg_rain_db=res.avg_rain_db, avg_pkt_loss=res.avg_pkt_loss,
+                outage_fraction=res.outage_fraction, sat_name_series=res.sat_name_series,
+                handoff_events=handoffs,
+            ))
+        logger.info("full_simulation_completed", duration_s=round(time.time()-start_time,2))
+        return SimulationResponse(results=response_results)
+    except Exception as e:
+        logger.error("full_simulation_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/constellations")
+async def list_constellations():
+    return {"constellations": list(NAMED_CONSTELLATIONS.keys())}
+
+@app.get("/stations")
+async def list_stations():
+    return {"stations": [g["name"] for g in GROUND_STATIONS]}
 
 @app.get("/health")
 async def health():
