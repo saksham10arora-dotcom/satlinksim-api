@@ -18,6 +18,4 @@ RUN satlinksim-update
 
 EXPOSE 8000
 
-# Run the FastAPI server (not the Streamlit UI)
-ENTRYPOINT ["satlinksim"]
-CMD ["api"]
+ENTRYPOINT ["satlinksim-api"]

@@ -3,8 +3,6 @@ services:
     name: satlinksim-api
     runtime: docker
     dockerfilePath: Dockerfile.api
+    startCommand: satlinksim-api
     plan: free
-    envVars:
-      - key: PORT
-        value: 8000
     healthCheckPath: /health
